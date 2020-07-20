@@ -1,12 +1,12 @@
 # !/bin/bash
 
 #Path
-export ROOT_DIR=/home/guanyu/guanyu/handoff #abs. path of this github repository 
-export TIMIT_DIR=/home/guanyu/guanyu/timit_data #abs. path of your timit dataset
-export DATA_PATH=${ROOT_DIR}/data
+export ROOT_DIR=/home/darong/darong/GAN_Harmonized_with_HMMs #abs. path of this github repository
+export TIMIT_DIR=/home/darong/other_storage/data/timit #abs. path of your timit dataset
+export DATA_PATH=/home/darong/frequent_data/GAN_Harmonized_with_HMMs/data
 
 #Boundaries type: orc / uns
-export bnd_type=uns
+export bnd_type=orc
 
 #Setting: match / nonmatch
 export setting=match
