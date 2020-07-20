@@ -192,7 +192,12 @@ class UnsModel(nn.Module):
         self.gen_model.eval()
         fers, fnums = 0, 0
         for feat, frame_label, length in dev_source:
-            prob = self.gen_model(feat.to(device), mask_len=length).detach().cpu().numpy()
+            prob, soft_prob, hard_prob  = self.gen_model(feat.to(device), mask_len=length)
+            if self.config.output_gumbel == 'soft':
+                prob = soft_prob
+            elif self.config.output_gumbel == 'hard':
+                prob = hard_prob
+            prob = prob.detach().cpu().numpy()
             pred = prob.argmax(-1)
             frame_label = frame_label.numpy()
             frame_error, frame_num, _ = frame_eval(pred, frame_label, length)
