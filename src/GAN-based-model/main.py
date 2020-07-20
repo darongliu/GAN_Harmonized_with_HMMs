@@ -29,8 +29,9 @@ def addParser():
     parser.add_argument('--aug',            action='store_true', help='')
     parser.add_argument('--data_dir',       type=str, default=f'/home/r06942045/myProjects/GAN_Harmonized_with_HMMs/data') 
     parser.add_argument('--save_dir',       type=str, default=f'/home/r06942045/myProjects/GAN_Harmonized_with_HMMs/data/save/test_model') 
-    parser.add_argument('--load_ckpt',       type=str, default=f'ckpt_9000.pth') 
+    parser.add_argument('--load_ckpt',      type=str, default=f'ckpt_9000.pth') 
     parser.add_argument('--config',         type=str, default=f'/home/r06942045/myProjects/GAN_Harmonized_with_HMMs/src/GAN-based-model/config.yaml') 
+    parser.add_argument('--prefix',         type=str, default=f'', help='used for output fer result') 
     return parser
 
 def print_bar():
@@ -66,6 +67,7 @@ def print_training_parameter(args, config):
         print (f'   data_dir:               {args.data_dir}')
         print (f'   save_dir:               {args.save_dir}')
         print (f'   config_path:            {args.config}')
+        print (f'   prefix:                 {args.prefix}')
     print_bar()     
 
 
@@ -158,12 +160,17 @@ if __name__ == "__main__":
     print ('Building Session...')
     print_bar()
 
+    if args.prefix == '':
+        fer_result_path = ''
+    else:
+        fer_result_path = os.path.join(args.data_dir, 'result', args.prefix+'.log')
+
     if args.mode == 'train':
         print_training_parameter(args, config)
         g.train(train_data_set, dev_data_set, args.aug)
         print_training_parameter(args, config)
         g.test(train_data_set, f'{args.save_dir}/train.pkl')
-        g.test(dev_data_set, f'{args.save_dir}/test.pkl')
+        g.test(dev_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
 
     elif args.mode == 'load':
         print_training_parameter(args, config)
@@ -171,10 +178,10 @@ if __name__ == "__main__":
         g.train(train_data_set, dev_data_set, args.aug)
         print_training_parameter(args, config)
         g.test(train_data_set, f'{args.save_dir}/train.pkl')
-        g.test(dev_data_set, f'{args.save_dir}/test.pkl')
+        g.test(dev_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
 
     else:
         g.load_ckpt(config.load_path)
         g.test(train_data_set, f'{args.save_dir}/train.pkl')
-        g.test(dev_data_set, f'{args.save_dir}/test.pkl')
+        g.test(dev_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
 

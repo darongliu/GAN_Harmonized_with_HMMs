@@ -37,5 +37,7 @@ gen_lr: 0.001
 dis_lr: 0.002
 sup_lr: 0.001
 
-
-
+# gumbel
+gan_gumbel: 'soft' # no, soft, hard
+intra_gumbel: 'soft'  # no, soft, hard
+output_gumbel: 'no'  # no, soft, hard

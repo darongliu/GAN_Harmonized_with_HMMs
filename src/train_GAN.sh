@@ -1,7 +1,8 @@
 #!/bin/bash
 iteration=$1
+overall_prefix=$2
 
-prefix=${bnd_type}_iter${iteration}_${setting}_gan
+prefix=${overall_prefix}${bnd_type}_iter${iteration}_${setting}_gan
 
 # Train GAN and output phoneme posterior
 cd GAN-based-model
@@ -11,7 +12,8 @@ python3 main.py --mode train --cuda_id 0 \
                --setting $setting \
                --data_dir $DATA_PATH \
                --save_dir $DATA_PATH/save/${prefix} \
-               --config "./config.yaml"
+               --config "./config.yaml" \
+               --prefix $prefix
 
 #python3 main.py --mode test --cuda_id 0 \
                #--bnd_type $bnd_type --iteration $iteration \
@@ -38,4 +40,4 @@ cd ../
                    #--file_name train_output.txt | tee $DATA_PATH/result/${prefix}.train.log
 python3 eval_per.py --bnd_type $bnd_type --set_type test --lm_type $setting \
                    --data_path $DATA_PATH --prefix $prefix \
-                   --file_name test_output.txt | tee $DATA_PATH/result/${prefix}.log
+                   --file_name test_output.txt | tee -a $DATA_PATH/result/${prefix}.log

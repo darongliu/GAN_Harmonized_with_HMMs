@@ -60,9 +60,14 @@ class Decoder():
         os.system('%s/scripts/decode.sh --cmd run.pl --skip_scoring %s --nj %s %s %s %s | tee %s/decode.log || exit 1;' % ( os.getcwd(), scoring_cmd, self.nj, self.graph_dir, self.posterior_dir, self.decode_dir, self.decode_dir))
         
         # Get best WER and print it
-        wer = os.popen('grep WER {}/wer_{}_{}'.format(self.decode_dir,lmwt,penalty)).read()
+        # get penalty
+        best_wer_path = os.path.join(self.decode_dir,'scoring_kaldi/best_wer')
+        with open(best_wer_path, 'r') as f:
+            temp = f.read()
+            best_penalty = temp.splitlines()[0].split('_')[-1]
+            best_lmwt = temp.splitlines()[0].split('_')[-2]
 
-        output_path = os.path.join(self.decode_dir,'scoring_kaldi/penalty_{}/{}.txt'.format(penalty,lmwt))
+        output_path = os.path.join(self.decode_dir,'scoring_kaldi/penalty_{}/{}.txt'.format(best_penalty,best_lmwt))
 
         os.system("cat {} | sort > {}".format(output_path, output_file))
         print("The file of decoding results is in: {}\n".format(output_file))

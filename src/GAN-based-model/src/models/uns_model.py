@@ -52,22 +52,39 @@ class UnsModel(nn.Module):
                 intra_diff_num=None):
         sample_feat = sample_feat.to(device)
 
-        soft_prob = self.gen_model(sample_feat, frame_temp, sample_len)
-        fake_sample = soft_prob
+        prob, soft_prob, hard_prob = self.gen_model(sample_feat, frame_temp, sample_len)
+
+        if self.config.gan_gumbel == 'soft':
+            fake_sample = soft_prob
+        elif self.config.gan_gumbel == 'hard':
+            fake_sample = hard_prob
+        else:
+            fake_sample = prob
+
+        if self.config.intra_gumbel == 'soft':
+            intra_sample = soft_prob
+        elif self.config.intra_gumbel == 'hard':
+            intra_sample = hard_prob
+        else:
+            intra_sample = prob
+
+        
         real_sample = gen_real_sample(target_idx, target_len, self.config.phn_size).to(device)
 
         if intra_diff_num is not None:
-            batch_size = soft_prob.size(0) // 2
+            # generator
+            batch_size = fake_sample.size(0) // 2
             intra_diff_num = intra_diff_num.to(device)
 
             g_loss = self.dis_model.calc_g_loss(real_sample, target_len,
                                                 fake_sample, sample_len)
-            seg_loss = self.gen_model.calc_intra_loss(soft_prob[:batch_size],
-                                                      soft_prob[batch_size:],
+            seg_loss = self.gen_model.calc_intra_loss(intra_sample[:batch_size],
+                                                      intra_sample[batch_size:],
                                                       intra_diff_num)
             return g_loss + self.config.seg_loss_ratio*seg_loss, seg_loss, fake_sample
 
         else:
+            # discriminator
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
                                                          fake_sample, sample_len)
             return d_loss + self.config.penalty_ratio*gp_loss, gp_loss
@@ -87,7 +104,7 @@ class UnsModel(nn.Module):
         gen_loss, dis_loss, seg_loss, gp_loss = 0, 0, 0, 0
         step_gen_loss, step_dis_loss, step_seg_loss, step_gp_loss = 0, 0, 0, 0
         max_fer = 100.0
-        frame_temp = 0.9
+        frame_temp = self.config.frame_temp
 
         self.gen_model.train()
         self.dis_model.train()
@@ -95,8 +112,8 @@ class UnsModel(nn.Module):
         t = trange(self.config.step)
         for step in t:
             self.step += 1
-            if self.step == 8000: fram_temp = 0.8
-            if self.step == 12000: fram_temp = 0.7
+            #if self.step == 8000: fram_temp = 0.8
+            #if self.step == 12000: fram_temp = 0.7
 
             for _ in range(self.config.dis_iter):
                 self.dis_optim.zero_grad()
@@ -184,14 +201,19 @@ class UnsModel(nn.Module):
         step_fer = fers / fnums * 100
         return step_fer
 
-    def test(self, dev_data_set, file_path):
+    def test(self, dev_data_set, file_path, fer_result_path=''):
         dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
         self.gen_model.eval()
         fers, fnums = 0, 0
         probs = []
         for feat, frame_label, length in dev_source:
             feat = pad_sequence(feat, max_len=self.config.feat_max_length)
-            prob = self.gen_model(feat.to(device), mask_len=length).detach().cpu().numpy()
+            prob, soft_prob, hard_prob  = self.gen_model(feat.to(device), mask_len=length)
+            if self.config.output_gumbel == 'soft':
+                prob = soft_prob
+            elif self.config.output_gumbel == 'hard':
+                prob = hard_prob
+            prob = prob.detach().cpu().numpy()
             pred = prob.argmax(-1)
             frame_label = frame_label.numpy()
             frame_error, frame_num, _ = frame_eval(pred, frame_label, length)
@@ -201,6 +223,9 @@ class UnsModel(nn.Module):
             fnums += frame_num
         step_fer = fers / fnums * 100
         print(step_fer)
+        if fer_result_path != '':
+            with open(fer_result_path, 'w') as f:
+                f.write('frame error rate: '+str(step_fer))
         print(np.array(probs).shape)
         pk.dump(np.array(probs), open(file_path, 'wb'))
 

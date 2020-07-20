@@ -32,11 +32,21 @@ class Frame2Phn(nn.Module):
             prob: (batch, timesteps, phn_size)
         """
         output = self.model(x)
+        prob = self.softmax(output) # no gumbel
+
         output += self.sample_noise(output)
-        prob = self.softmax(output / temp)
+        soft_prob = self.softmax(output / temp)
+
+        hard_prob = torch.nn.functional.one_hot(torch.max(soft_prob, dim=-1)[-1], soft_prob.shape[-1])
+        hard_prob = hard_prob.cuda().float()
+        hard_prob = (hard_prob - soft_prob).detach() + soft_prob
+
         if mask_len is not None:
             prob = masked_out(prob, mask_len)
-        return prob
+            soft_prob = masked_out(soft_prob, mask_len)
+            hard_prob = masked_out(hard_prob, mask_len)
+
+        return prob, soft_prob, hard_prob
 
     def calc_seq_loss(self, x, y):
         x = x[:, :y.size(1)]

@@ -8,6 +8,9 @@
 ### Experimental Setting 
 . ./config.sh
 
+### overall prefix
+overall_prefix=$1
+
 if [ $bnd_type == orc ]; then
   total_iter=1
 else
@@ -23,9 +26,9 @@ cd src
 
 for iteration in $(seq 1 $total_iter); do
   ### train GAN model and get transcriptions
-  bash train_GAN.sh $iteration || exit 1
+  bash train_GAN.sh $iteration $overall_prefix || exit 1
 
   ### train HMM and get new boundaries
-  bash train_HMM.sh $iteration || exit 1
+  bash train_HMM.sh $iteration $overall_prefix || exit 1
 done
 
