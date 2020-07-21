@@ -23,7 +23,7 @@ phn_max_length: 75
 feat_max_length: 777
 concat_window: 11
 sample_var: 0.15
-repeat: 6
+repeat: 6 # repeat every sample x times
 
 # Train
 batch_size: 50
@@ -40,4 +40,4 @@ sup_lr: 0.001
 # gumbel
 gan_gumbel: 'soft' # no, soft, hard
 intra_gumbel: 'soft'  # no, soft, hard
-output_gumbel: 'no'  # no, soft, hard
+output_gumbel: 'soft'  # no, soft, hard
