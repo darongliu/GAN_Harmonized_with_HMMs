@@ -210,7 +210,12 @@ class UnsModel(nn.Module):
         dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
         self.gen_model.eval()
         fers, fnums = 0, 0
+        fers_39, fnums_39 = 0, 0
         probs = []
+        # calc all phn 39 and give index
+        all_p39 = list(set(dev_data_set.phn_mapping.values()))
+        phn392idx = dict(zip(all_p39, range(len(all_p39))))
+
         for feat, frame_label, length in dev_source:
             feat = pad_sequence(feat, max_len=self.config.feat_max_length)
             prob, soft_prob, hard_prob  = self.gen_model(feat.to(device), mask_len=length)
@@ -226,11 +231,32 @@ class UnsModel(nn.Module):
             probs.extend(prob)
             fers += frame_error
             fnums += frame_num
+
+            # 39
+            pred_39 = np.zeros_like(pred)
+            l, w  = pred.shape
+            for i in range(l):
+                for j in range(w):
+                    pred_39[i][j] = phn392idx[dev_data_set.phn_mapping[pred[i][j]]]
+
+            frame_label_39 = np.zeros_like(frame_label)
+            l, w  = frame_label.shape
+            for i in range(l):
+                for j in range(w):
+                    if frame_label[i][j] != -100:
+                        frame_label_39[i][j] = phn392idx[dev_data_set.phn_mapping[frame_label[i][j]]]
+            frame_error_39, frame_num_39, _ = frame_eval(pred_39, frame_label_39, length)
+
+            fers_39 += frame_error_39
+            fnums_39 += frame_num_39
         step_fer = fers / fnums * 100
-        print(step_fer)
+        step_fer_39 = fers_39 / fnums_39 * 100
+        print('fer:', step_fer)
+        print('fer on phn 39: ', step_fer_39)
         if fer_result_path != '':
             with open(fer_result_path, 'w') as f:
                 f.write('frame error rate: '+str(step_fer))
+                f.write('frame error rate on phn 39: '+str(step_fer_39))
         print(np.array(probs).shape)
         pk.dump(np.array(probs), open(file_path, 'wb'))
 

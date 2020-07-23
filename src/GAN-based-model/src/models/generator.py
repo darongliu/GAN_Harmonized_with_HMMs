@@ -34,8 +34,8 @@ class Frame2Phn(nn.Module):
         output = self.model(x)
         prob = self.softmax(output) # no gumbel
 
-        output += self.sample_noise(output)
-        soft_prob = self.softmax(output / temp)
+        gumbel_output = output + self.sample_noise(output)
+        soft_prob = self.softmax(gumbel_output / temp)
 
         hard_prob = torch.nn.functional.one_hot(torch.max(soft_prob, dim=-1)[-1], soft_prob.shape[-1])
         hard_prob = hard_prob.cuda().float()

@@ -14,7 +14,8 @@ cd unsupervised-HMM
 python3 local/prepare_data.py --bnd_type $bnd_type --lm_type $setting \
                              --data_path $DATA_PATH \
                              --timit_path $TIMIT_DIR \
-                             --iteration $iteration
+                             --iteration $iteration \
+                             --gan_path $GAN_PATH
 
 # Train HMM iteratively 
 bash run.sh $DATA_PATH $HMM_PATH $setting $jobs

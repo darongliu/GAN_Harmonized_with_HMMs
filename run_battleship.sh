@@ -27,11 +27,11 @@ cd src
 
 for iteration in $(seq 1 $total_iter); do
   ### train GAN model
-  bash train_GAN.sh  $iteration $gan_config $overall_prefix || exit 1
+  hrun -G -c 4 -m 32 bash train_GAN.sh  $iteration $gan_config $overall_prefix || exit 1
 
   ### wfst decoder
-  bash train_wfst.sh $iteration $overall_prefix|| exit 1
+  hrun -c 8 -m 32 bash train_wfst.sh $iteration $overall_prefix|| exit 1
 
   ### train HMM and get new boundaries
-  bash train_HMM.sh $iteration $overall_prefix || exit 1
+  hrun -c 8 -m 32 bash train_HMM.sh $iteration $overall_prefix || exit 1
 done

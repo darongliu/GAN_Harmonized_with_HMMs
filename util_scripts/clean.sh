@@ -39,10 +39,11 @@ elif [ "$clean_type" = "hmm" ]
 then
     rm -rf $HMM_PATH
     rm -rf ${DATA_PATH}/result/${hmm_prefix}.log  
+    rm -rf ${DATA_PATH}/timit_for_HMM
 elif [ "$clean_type" = "all" ]
 then
-    rm -rf $HMM_PATH
-    rm -rf $GAN_PATH
+    rm -rf $DATA_PATH/save
+    rm -rf ${DATA_PATH}/timit_for_HMM
     rm -rf ${DATA_PATH}/result/${hmm_prefix}.log  
     rm -rf ${DATA_PATH}/result/${gan_prefix}.log
 else

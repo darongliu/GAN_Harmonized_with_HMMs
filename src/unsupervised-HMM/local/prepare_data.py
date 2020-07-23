@@ -47,6 +47,7 @@ def addParser():
     parser.add_argument('--data_path',   type=str, default='/home/guanyu/guanyu/handoff/data', help='')
     parser.add_argument('--timit_path',  type=str, default='/home/guanyu/guanyu/timit_data', help='')
     parser.add_argument('--iteration',   type=int, default=1, help='')
+    parser.add_argument('--gan_path',    type=str, default='', help='')
     return parser
 
 if __name__ == '__main__':
@@ -58,14 +59,14 @@ if __name__ == '__main__':
     test_data_path = data_dir + '/timit_for_HMM/test'
     train_data_correct_path = data_dir + '/timit_for_HMM/train_correct'
     train_wavs_names = pkl.load(open(f'{args.data_path}/timit_for_GAN/audio/timit-train-meta.pkl','rb'))
-    train_wav_path  = f'{args.timit_path}/train' 
-    train_trans_path = f'{args.data_path}/save/{args.bnd_type}_iter{args.iteration}_{args.lm_type}_gan/train_output.txt'
+    train_wav_path  = f'{args.timit_path}/train'
+    train_trans_path = f'{args.gan_path}/train_output.txt'
     # train_trans_path = f'{args.data_path}/save/{args.bnd_type}_{args.lm_type}_gan/train_output.txt'
 
     train_trans = pkl.load(open(f'{args.data_path}/timit_for_GAN/audio/timit-train-phn.pkl','rb'))
 
     test_wavs_names = pkl.load(open(f'{args.data_path}/timit_for_GAN/audio/timit-test-meta.pkl','rb'))
-    test_wav_path  = f'{args.timit_path}/test' 
+    test_wav_path  = f'{args.timit_path}/test'
     test_trans = pkl.load(open(f'{args.data_path}/timit_for_GAN/audio/timit-test-phn.pkl','rb'))
 
     ## train data
@@ -95,7 +96,7 @@ if __name__ == '__main__':
     prepare_wav_scp(test_wavs_names, test_wav_path, os.path.join(test_data_path,'wav.scp'))
     prepare_utt2spk(test_lengths, os.path.join(test_data_path,'utt2spk'))
     prepare_utt2spk(test_lengths, os.path.join(test_data_path,'spk2utt'))
-    prepare_orc_text(test_trans, os.path.join(test_data_path,'text')) 
+    prepare_orc_text(test_trans, os.path.join(test_data_path,'text'))
 
 
 
