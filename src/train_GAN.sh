@@ -14,7 +14,8 @@ python3 main.py --mode train --cuda_id 0 \
                --data_dir $DATA_PATH \
                --save_dir $DATA_PATH/save/${prefix} \
                --config $gan_config \
-               --prefix $prefix
+               --prefix $prefix \
+               --overall_prefix $overall_prefix
 
 #python3 main.py --mode test --cuda_id 0 \
                #--bnd_type $bnd_type --iteration $iteration \

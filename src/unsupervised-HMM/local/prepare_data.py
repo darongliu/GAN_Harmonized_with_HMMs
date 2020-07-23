@@ -48,6 +48,7 @@ def addParser():
     parser.add_argument('--timit_path',  type=str, default='/home/guanyu/guanyu/timit_data', help='')
     parser.add_argument('--iteration',   type=int, default=1, help='')
     parser.add_argument('--gan_path',    type=str, default='', help='')
+    parser.add_argument('--hmm_path',    type=str, default='', help='')
     return parser
 
 if __name__ == '__main__':
@@ -55,9 +56,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     data_dir = args.data_path
-    train_data_path = data_dir + '/timit_for_HMM/train'
-    test_data_path = data_dir + '/timit_for_HMM/test'
-    train_data_correct_path = data_dir + '/timit_for_HMM/train_correct'
+    train_data_path = f'{args.hmm_path}/timit_for_HMM/train'
+    test_data_path  = f'{args.hmm_path}/timit_for_HMM/test'
+    train_data_correct_path = f'{args.hmm_path}/timit_for_HMM/train_correct'
     train_wavs_names = pkl.load(open(f'{args.data_path}/timit_for_GAN/audio/timit-train-meta.pkl','rb'))
     train_wav_path  = f'{args.timit_path}/train'
     train_trans_path = f'{args.gan_path}/train_output.txt'

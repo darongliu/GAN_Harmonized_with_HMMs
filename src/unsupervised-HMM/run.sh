@@ -12,24 +12,25 @@ prefix=$3  # match or nonmatch
 exp=$2
 phone_map_txt=$1/phones.60-48-39.map.txt
 lm_text=$1/timit_for_GAN/text/${prefix}_lm.48
-hmm_data=$1/timit_for_HMM/
+hmm_data=$2/timit_for_HMM/
 ## Parameters
 nj=$4
 n_gram=9
 
 ## Output directory
-phone_list_txt=data/phone_list.txt
-dict=data/local/dict
-lang=data/lang
-lm_dir=data/${prefix}
+data_dir=$2/data
+phone_list_txt=$data_dir/phone_list.txt
+dict=$data_dir/local/dict
+lang=$data_dir/lang
+lm_dir=$data_dir/${prefix}
 lm=$lm_dir/$n_gram\gram.lm
-lang_test=data/${prefix}/lang_test_$n_gram\gram
+lang_test=$data_dir/${prefix}/lang_test_$n_gram\gram
 mfccdir=$hmm_data/mfcc
 
 if [ $stage -le 0 ]; then
   # Preprocess
   # Format phones.txt and get transcription
-  mkdir -p data
+  mkdir -p $data_dir
   python3 local/preprocess.py $phone_map_txt $phone_list_txt 
   
   echo "$0: Preparing dict."
@@ -37,7 +38,7 @@ if [ $stage -le 0 ]; then
   
   echo "$0: Generating lang directory."
   utils/prepare_lang.sh --position_dependent_phones false \
-    $dict "<UNK>" data/local/lang $lang 
+    $dict "<UNK>" $data_dir/local/lang $lang 
   echo "$0: Creating data." 
   
   cat $lang/words.txt | awk '{print $1 }'  | grep -v "<eps>"  |\
@@ -62,7 +63,7 @@ fi
 if [ $stage -le 2 ]; then
   # train a monophone system
   steps/train_mono.sh --boost-silence 1.25 --nj $nj --cmd "$train_cmd" \
-                      $hmm_data/train data/lang $exp/mono
+                      $hmm_data/train $data_dir/lang $exp/mono
   utils/mkgraph.sh $lang_test \
                    $exp/mono $exp/mono/graph
   #decode using the monophone model
@@ -81,11 +82,11 @@ if [ $stage -le 3 ]; then
   cat $prev_gmm/decode_train/scoring_kaldi/penalty_1.0/1.txt | sort > $new_data/text
 
   steps/align_si.sh --boost-silence 1.25 --nj $nj --cmd "$train_cmd" \
-                   $new_data data/lang $prev_gmm $ali
+                   $new_data $data_dir/lang $prev_gmm $ali
 
   # train a first delta + delta-delta triphone system on a subset of 5000 utterances
   steps/train_deltas.sh --boost-silence 1.25 --cmd "$train_cmd" \
-                        2500 15000 $new_data data/lang $ali $gmm
+                        2500 15000 $new_data $data_dir/lang $ali $gmm
 
   utils/mkgraph.sh $lang_test \
                    $gmm $gmm/graph
@@ -106,12 +107,12 @@ if [ $stage -le 4 ]; then
   cat $prev_gmm/decode_train/scoring_kaldi/penalty_1.0/1.txt | sort > $new_data/text
 
   steps/align_si.sh --nj $nj --cmd "$train_cmd" \
-                   $new_data data/lang $prev_gmm $ali
+                   $new_data $data_dir/lang $prev_gmm $ali
 
   # train a first delta + delta-delta triphone system on a subset of 5000 utterances
   steps/train_lda_mllt.sh --cmd "$train_cmd" \
                           --splice-opts "--left-context=3 --right-context=3" 2500 15000 \
-                       $new_data data/lang $ali $gmm
+                       $new_data $data_dir/lang $ali $gmm
 
   utils/mkgraph.sh $lang_test \
                    $gmm $gmm/graph
@@ -132,12 +133,12 @@ if [ $stage -le 5 ]; then
   cat $prev_gmm/decode_train/scoring_kaldi/penalty_1.0/1.txt | sort > $new_data/text
 
   steps/align_si.sh --nj $nj --cmd "$train_cmd" \
-                   $new_data data/lang $prev_gmm $ali
+                   $new_data $data_dir/lang $prev_gmm $ali
 
   # train a first delta + delta-delta triphone system on a subset of 5000 utterances
   steps/train_lda_mllt.sh --cmd "$train_cmd" \
                           --splice-opts "--left-context=3 --right-context=3" 2500 15000 \
-                       $new_data data/lang $ali $gmm
+                       $new_data $data_dir/lang $ali $gmm
 
   utils/mkgraph.sh $lang_test \
                    $gmm $gmm/graph

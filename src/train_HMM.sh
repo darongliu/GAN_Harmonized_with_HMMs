@@ -15,7 +15,8 @@ python3 local/prepare_data.py --bnd_type $bnd_type --lm_type $setting \
                              --data_path $DATA_PATH \
                              --timit_path $TIMIT_DIR \
                              --iteration $iteration \
-                             --gan_path $GAN_PATH
+                             --gan_path $GAN_PATH \
+                             --hmm_path $HMM_PATH
 
 # Train HMM iteratively 
 bash run.sh $DATA_PATH $HMM_PATH $setting $jobs
@@ -24,7 +25,8 @@ bash run.sh $DATA_PATH $HMM_PATH $setting $jobs
 bash local/ali_to_frame.sh $HMM_PATH $jobs 
 cd ../
 python3 get_new_bound.py --bnd_type $bnd_type --iteration $iteration \
-                        --prefix $hmm_prefix --data_path $DATA_PATH
+                        --prefix $hmm_prefix --data_path $DATA_PATH \
+                        --overall_prefix $overall_prefix
 
 # Evalution
 if [ -e $DATA_PATH/result/${hmm_prefix}.log ]; then 
