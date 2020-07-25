@@ -14,6 +14,7 @@ from src.models.gan_wrapper import GenWrapper, DisWrapper
 from src.lib.utils import gen_real_sample, pad_sequence
 from src.lib.metrics import frame_eval
 
+import torch_optimizer as optim # from https://github.com/jettify/pytorch-optimizer.git
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -38,10 +39,16 @@ class UnsModel(nn.Module):
                                     config.dis_hidden_2_size,
                                     max_len=config.phn_max_length).to(device)
 
-        self.gen_optim = torch.optim.Adam(self.gen_model.parameters(),
-                                          lr=config.gen_lr, betas=(0.5, 0.9))
-        self.dis_optim = torch.optim.Adam(self.dis_model.parameters(),
-                                          lr=config.dis_lr, betas=(0.5, 0.9))
+        if config.optimizer == 'radam':
+            self.gen_optim = optim.RAdam(self.gen_model.parameters(),
+                                         lr=config.gen_lr, betas=(0.5, 0.9))
+            self.dis_optim = optim.RAdam(self.dis_model.parameters(),
+                                         lr=config.dis_lr, betas=(0.5, 0.9))
+        else:
+            self.gen_optim = torch.optim.Adam(self.gen_model.parameters(),
+                                              lr=config.gen_lr, betas=(0.5, 0.9))
+            self.dis_optim = torch.optim.Adam(self.dis_model.parameters(),
+                                              lr=config.dis_lr, betas=(0.5, 0.9))
 
         sys.stdout.write('\b'*len(cout_word))
         cout_word = 'UNSUPERVISED MODEL: finish     '
