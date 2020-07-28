@@ -42,11 +42,13 @@ def print_model_parameter(config):
     print ('Model Parameter:')
     print (f'   generator first layer:     {config.gen_hidden_size}')
     print (f'   frame temperature:         {config.frame_temp}')
-    print (f'   dicriminator emb size:     {config.dis_emb_size}')
-    print (f'   dicriminator first layer:  {config.dis_hidden_1_size}')
-    print (f'   dicriminator second layer: {config.dis_hidden_2_size}')
     print (f'   intra-segment loss ratio:  {config.seg_loss_ratio}')
     print (f'   gradient penalty ratio:    {config.penalty_ratio}')
+
+    print (f'   discriminator model type:     {config.model_type}')
+    print (f'   use maxlen:                   {config.use_maxlen}')
+    for key in config[config.model_type].keys():
+        print (f'{key}:     {config[config.model_type][key]}')
     print_bar()
 
 def print_training_parameter(args, config):

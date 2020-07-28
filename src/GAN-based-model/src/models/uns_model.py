@@ -33,11 +33,12 @@ class UnsModel(nn.Module):
         self.gen_model = GenWrapper(config.feat_dim,
                                     config.phn_size,
                                     config.gen_hidden_size).to(device)
-        self.dis_model = DisWrapper(config.phn_size,
-                                    config.dis_emb_size,
-                                    config.dis_hidden_1_size,
-                                    config.dis_hidden_2_size,
-                                    max_len=config.phn_max_length).to(device)
+        model_type = config['model_type']
+        max_len = config.phn_max_length if config.use_maxlen else None
+        self.dis_model = DisWrapper(phn_size=config.phn_size,
+                                    max_len=max_len,
+                                    model_type=model_type,
+                                    **config[model_type]).to(device)
 
         if config.optimizer == 'radam':
             self.gen_optim = optim.RAdam(self.gen_model.parameters(),

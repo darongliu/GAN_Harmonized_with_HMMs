@@ -43,7 +43,8 @@ def pad_to_max_len(sequence, pad_value=0, max_len=None):
         if max_len > output.size(1):
             size = list(output.shape)
             size[1] = max_len
-            result = torch.ones(size, device=output.device, dtype=output.dtype) * pad_value
+            result = torch.ones(size, device=output.device, dtype=output.dtype)
+            result.fill_(pad_value)
             result[:, :output.size(1)] = output
             return result
         output = output[:, :max_len]
