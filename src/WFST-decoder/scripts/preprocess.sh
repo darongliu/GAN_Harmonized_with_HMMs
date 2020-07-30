@@ -16,19 +16,21 @@ n_gram=9
 
 . ./utils/parse_options.sh
 
+data=$2/wfst_data
+
 ## Output directory
-phone_list_txt=data/phone_list.txt
-dict=data/local/dict
-lang=data/lang
-lm_dir=data/${prefix}
+phone_list_txt=$data/phone_list.txt
+dict=$data/local/dict
+lang=$data/lang
+lm_dir=$data/${prefix}
 lm=$lm_dir/$n_gram\gram.lm
-lang_test=data/${prefix}/lang_test_$n_gram\gram
-treedir=data/${prefix}/tree_sp$self_loop_prob  # it's actually just a trivial tree (no tree building)
+lang_test=$data/${prefix}/lang_test_$n_gram\gram
+treedir=$data/${prefix}/tree_sp$self_loop_prob  # it's actually just a trivial tree (no tree building)
 
 if [ $stage -le 0 ]; then
   # Preprocess
   # Format phones.txt and get transcription
-  mkdir -p data
+  mkdir -p $data
   python3 scripts/preprocess.py $phone_map_txt $phone_list_txt 
   
   echo "$0: Preparing dict."
@@ -36,7 +38,7 @@ if [ $stage -le 0 ]; then
   
   echo "$0: Generating lang directory."
   utils/prepare_lang.sh --position_dependent_phones false \
-    $dict "<UNK>" data/local/lang $lang 
+    $dict "<UNK>" $data/local/lang $lang 
   echo "$0: Creating data." 
 fi
 
