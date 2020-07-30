@@ -6,7 +6,7 @@
 
 
 ### Experimental Setting 
-. ./config.sh
+. ./config_battleship.sh
 
 ### overall prefix
 gan_config=$(readlink -m $1)

@@ -93,10 +93,11 @@ class WeakDiscriminator(nn.Module):
     Arguments:
         dim: channels
     """
-    def __init__(self, phn_size, dis_emb_dim, hidden_dim1, hidden_dim2, max_len=None):
+    def __init__(self, phn_size, dis_emb_dim, hidden_dim1, hidden_dim2, use_second_conv=True, max_len=None):
         super().__init__()
         self.max_len = max_len
         self.emb_bag = nn.Embedding(phn_size, dis_emb_dim)
+        self.use_second_conv = use_second_conv
 
         self.conv_1 = nn.ModuleList([
             nn.Conv1d(dis_emb_dim, hidden_dim1, 3, padding=1),
@@ -105,19 +106,21 @@ class WeakDiscriminator(nn.Module):
             nn.Conv1d(dis_emb_dim, hidden_dim1, 9, padding=4),
         ])
         self.lrelu_1 = nn.LeakyReLU()
-        self.conv_2 = nn.ModuleList([
-            nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
-            nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
-            nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
-            nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
-        ])
+        if use_second_conv:
+            self.conv_2 = nn.ModuleList([
+                nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
+                nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
+                nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
+                nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
+            ])
+            self.lrelu_2 = nn.LeakyReLU()
         self.flatten = nn.Flatten()
-        self.lrelu_2 = nn.LeakyReLU()
 
+        hidden_dim = hidden_dim2 if use_second_conv else hidden_dim1
         if max_len is not None:
-            self.linear = nn.Linear(max_len*4*hidden_dim2, 1)
+            self.linear = nn.Linear(max_len*4*hidden_dim, 1)
         else:
-            self.linear = nn.Linear(4*hidden_dim2, 1)
+            self.linear = nn.Linear(4*hidden_dim, 1)
         self._spec_init()
 
     def _spec_init(self):
@@ -145,9 +148,10 @@ class WeakDiscriminator(nn.Module):
         outputs = outputs.transpose(1, 2)
         outputs = torch.cat([conv(outputs) for conv in self.conv_1], dim=1)
         outputs = self.lrelu_1(outputs)
-        outputs = torch.cat([conv(outputs) for conv in self.conv_2], dim=1)
+        if self.use_second_conv:
+            outputs = torch.cat([conv(outputs) for conv in self.conv_2], dim=1)
+            outputs = self.lrelu_2(outputs)
         outputs = outputs.transpose(1, 2)
-        outputs = self.lrelu_2(outputs)
         if self.max_len is not None:
             # (B, T, D) -> (B, T*D)
             outputs = self.flatten(outputs)
@@ -177,6 +181,14 @@ if __name__ == '__main__':
     kernel = 3
     use_batchnorm = False
     model  = Discriminator(phn_size, dis_emb_dim, hidden_dim, num_layers, kernel, use_batchnorm=use_batchnorm, max_len=T).cuda()
+
+    result = model(feat, inputs_len=feat_length)
+    print(result)
+
+    dis_emb_dim = 10
+    hidden_dim = 15
+    use_second_conv=False
+    model  = WeakDiscriminator(phn_size, dis_emb_dim, hidden_dim, hidden_dim, use_second_conv=use_second_conv, max_len=T).cuda()
 
     result = model(feat, inputs_len=feat_length)
     print(result)

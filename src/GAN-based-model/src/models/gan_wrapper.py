@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 from src.models.discriminator import WeakDiscriminator, Discriminator
 from src.models.lstm_discriminator import LSTMDiscriminator
+from src.models.transformer_discriminator import TransformerDiscriminator
 from src.models.generator import Frame2Phn
 from src.lib.utils import pad_sequence
 
@@ -18,6 +19,8 @@ class DisWrapper(nn.Module):
             self.model =     Discriminator(phn_size=phn_size, **model_config, max_len=max_len)
         elif model_type == 'lstm':
             self.model = LSTMDiscriminator(phn_size=phn_size, **model_config, max_len=max_len)
+        elif model_type == 'transformer':
+            self.model = TransformerDiscriminator(phn_size=phn_size, **model_config, max_len=max_len)
         else:
             self.model = WeakDiscriminator(phn_size=phn_size, **model_config, max_len=max_len)
 
