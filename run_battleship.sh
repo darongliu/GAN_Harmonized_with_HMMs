@@ -1,5 +1,8 @@
 # !/bin/bash
 
+### Experimental Setting 
+. ./config_battleship.sh
+
 ### overall prefix
 gan_config=$(readlink -m $1)
 overall_prefix=$2
@@ -13,17 +16,14 @@ fi
 ### Preprocess TIMIT
 # bash preprocess.sh
 
-
 ### Training Process
-cd src
-
 for iteration in $(seq 1 $total_iter); do
   ### train GAN model
-  hrun -G -c 8 -m 32 . ./cmd.sh && . ./path.sh &&  . ./config_battleship.sh && bash train_GAN.sh  $iteration $gan_config $overall_prefix || exit 1
+  hrun -G -c 8 -m 32 bash -c '. ./cmd.sh; . ./path.sh; . ./config_battleship.sh; cd src; bash train_GAN.sh '$iteration' '$gan_config' '$overall_prefix || exit 1
 
   ### wfst decoder
-  hrun -c 16 -m 32   . ./cmd.sh && . ./path.sh &&  . ./config_battleship.sh && train_wfst.sh $iteration $overall_prefix|| exit 1
+  hrun -c 16 -m 32   bash -c '. ./cmd.sh; . ./path.sh; . ./config_battleship.sh; cd src; bash train_wfst.sh '$iteration' '$overall_prefix || exit 1
 
   ### train HMM and get new boundaries
-  hrun -c 16 -m 32   . ./cmd.sh && . ./path.sh &&  . ./config_battleship.sh && train_HMM.sh $iteration $overall_prefix || exit 1
+  hrun -c 16 -m 32   bash -c '. ./cmd.sh; . ./path.sh; . ./config_battleship.sh; cd src; bash train_HMM.sh '$iteration' '$overall_prefix || exit 1
 done
