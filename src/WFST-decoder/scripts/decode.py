@@ -171,7 +171,7 @@ if __name__ == '__main__':
     output_file   = f'{save_dir}/{args.set_type}_output.txt'
 
     ## Start decode
-    trans_array = get_trans_array(f'{args.data_path}/phones.60-48-39.map.txt', 'data/lang/phones.txt')
+    trans_array = get_trans_array(f'{args.data_path}/phones.60-48-39.map.txt', f'{args.data_path}/wfst_data/lang/phones.txt')
     decoder = Decoder(graph_dir, posterior_dir, decode_dir, output_file, nj = args.jobs)
     likelihood = decoder.transform_likelihood(trans_array, likelihood)
     decoder.decode(likelihood, lengths, transcription)

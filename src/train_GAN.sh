@@ -9,6 +9,7 @@ prefix=${overall_prefix}${bnd_type}_iter${iteration}_${setting}_gan
 cd GAN-based-model
 
 mkdir -p $DATA_PATH/save/${prefix}/
+mkdir -p $DATA_PATH/result
 cp $gan_config $DATA_PATH/save/${prefix}/gan_config.yaml
 
 python3 main.py --mode train --cuda_id 0 \
