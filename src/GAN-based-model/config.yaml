@@ -60,7 +60,8 @@ dis_iter: 3
 gen_lr: 0.001
 dis_lr: 0.002
 sup_lr: 0.001
-optimizer: 'radam' # radam
+optimizer: 'sgd' # radam
+momentum: 0.9 # only used for sgd optimizer
 
 # gumbel
 gan_gumbel: 'soft' # no, soft, hard

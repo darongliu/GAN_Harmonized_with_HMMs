@@ -45,6 +45,11 @@ class UnsModel(nn.Module):
                                          lr=config.gen_lr, betas=(0.5, 0.9))
             self.dis_optim = optim.RAdam(self.dis_model.parameters(),
                                          lr=config.dis_lr, betas=(0.5, 0.9))
+        elif config.optimizer == 'sgd':
+            self.gen_optim = torch.optim.SGD(self.gen_model.parameters(),
+                                         lr=config.gen_lr, momentum=config.momentum)
+            self.dis_optim = torch.optim.SGD(self.dis_model.parameters(),
+                                         lr=config.dis_lr, momentum=config.momentum)
         else:
             self.gen_optim = torch.optim.Adam(self.gen_model.parameters(),
                                               lr=config.gen_lr, betas=(0.5, 0.9))
