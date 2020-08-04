@@ -12,6 +12,7 @@ class ResBlock(nn.Module):
     def __init__(self, idim, odim, kernel, use_batchnorm, res=True):
         super().__init__()
         self.res = res
+        self.lrelu = nn.LeakyReLU()
 
         if use_batchnorm:
             self.res_block = nn.Sequential(
@@ -32,7 +33,7 @@ class ResBlock(nn.Module):
         outputs = self.res_block(inputs)
         if self.res:
             outputs = outputs + inputs
-        return F.relu(outputs)
+        return self.lrelu(outputs)
 
 
 class Discriminator(nn.Module):
@@ -49,7 +50,6 @@ class Discriminator(nn.Module):
             ResBlock(dis_emb_dim, hidden_dim, kernel, use_batchnorm=use_batchnorm, res=False),
             *[ResBlock(hidden_dim,  hidden_dim, kernel, use_batchnorm=use_batchnorm) for i in range(num_layers-1)])
         self.flatten = nn.Flatten()
-        self.lrelu = nn.LeakyReLU()
 
         if max_len is not None:
             self.linear = nn.Linear(max_len*hidden_dim, 1)
@@ -78,7 +78,6 @@ class Discriminator(nn.Module):
         outputs = outputs.transpose(1, 2)
         outputs = self.blocks(outputs)
         outputs = outputs.transpose(1, 2)
-        outputs = self.lrelu(outputs)
         if self.max_len is not None:
             # (B, T, D) -> (B, T*D)
             outputs = self.flatten(outputs)

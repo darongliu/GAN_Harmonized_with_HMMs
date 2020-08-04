@@ -74,7 +74,7 @@ if __name__ == '__main__':
     if not os.path.isdir(train_data_path):
         os.makedirs(train_data_path)
     prepare_text_from_output(train_trans_path, os.path.join(train_data_path,'text'))
-    if args.iteration != 1: exit()
+    # if args.iteration != 1: exit()
 
     train_lengths = len(train_wavs_names['prefix'])
     prepare_wav_scp(train_wavs_names, train_wav_path, os.path.join(train_data_path,'wav.scp'))
