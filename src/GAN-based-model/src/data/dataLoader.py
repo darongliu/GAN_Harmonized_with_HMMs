@@ -59,7 +59,7 @@ def get_data_loader(dataset, batch_size, repeat=6, random_batch=True, shuffle=Fa
                             batch_sampler=RandomBatchSampler(dataset.source, batch_size//2),
                             collate_fn=source_collate_fn)
         target = DataLoader(dataset.target,
-                            batch_sampler=RandomBatchSampler(dataset.source, batch_size*6),
+                            batch_sampler=RandomBatchSampler(dataset.target, batch_size*repeat),
                             collate_fn=target_collate_fn)
     return source, target
 

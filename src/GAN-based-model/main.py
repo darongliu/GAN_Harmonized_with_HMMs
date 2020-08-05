@@ -93,13 +93,8 @@ if __name__ == "__main__":
     output_path       = f'{args.save_dir}/train.pkl'
     phn_map_path      = f'{args.data_dir}/phones.60-48-39.map.txt'
 
-    if args.setting == 'match': 
-        data_length = None # Whole Source
-        target_path = os.path.join(args.data_dir, config.match_target_path)
-    elif args.setting == 'nonmatch':
-        data_length = 3000
-        target_path = os.path.join(args.data_dir, config.nonmatch_target_path)
-    else: raise Exception("Invalid setting!", args.setting)
+    target_path = os.path.join(args.data_dir, 'timit_for_GAN/text', args.setting+'_lm.48')
+    data_length = None
     print_bar()
 
     ######################################################################

@@ -5,9 +5,6 @@ train_phn_path: 'timit_for_GAN/audio/timit-train-phn.pkl'
 dev_feat_path: 'timit_for_GAN/audio/timit-test-mfcc-nor.pkl'
 dev_orc_bnd_path: 'timit_for_GAN/audio/timit-test-orc1-bnd.pkl'
 dev_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
-#Target path
-match_target_path: 'timit_for_GAN/text/match_lm.48'
-nonmatch_target_path: 'timit_for_GAN/text/nonmatch_lm.48'
 
 # Model
 # generator
