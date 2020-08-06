@@ -28,13 +28,23 @@ def calc_fer(prediction : List[torch.Tensor],
         frame_num += l
     return frame_error, frame_num
 
+def per_eval(pred, frame_label, length):
+    """ Calculate PER with count of errors and total counts """
+    pred = [p[:l] for p, l in zip(pred, length)]
+    label = [f[:l] for f, l in zip(frame_label, length)]
+    phone_error, phone_num = calc_per(pred, label)
+    return phone_error, phone_num, phone_error / phone_num
+
 def calc_per(prediction : List[torch.Tensor],
             ground_truth : List[torch.Tensor]) -> float :
-
+    phone_error = 0
+    phone_num = 0
     prediction = [get_phoneseq(p) for p in prediction]
     ground_truth = [get_phoneseq(p) for p in ground_truth]
-    eds = [ed.eval(p, l) / len(l) for p, l in zip(prediction, ground_truth)]
-    return sum(eds) / (len(eds) + 1e-6), eds
+    for p, l in zip(prediction, ground_truth):
+        phone_error += ed.eval(p, l)
+        phone_num += len(l)
+    return phone_error, phone_num
 
 def calc_acc(prediction : List[torch.Tensor],
             ground_truth : List[torch.Tensor]) -> float :

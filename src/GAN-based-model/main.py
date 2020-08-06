@@ -120,7 +120,16 @@ if __name__ == "__main__":
                                      phn_map_path=phn_map_path,
                                      name='DATA LOADER(dev)',
                                      mode='dev')
+        # load test
+        test_data_set = PickleDataset(config,
+                                     os.path.join(args.data_dir, config.test_feat_path),
+                                     os.path.join(args.data_dir, config.test_phn_path),
+                                     os.path.join(args.data_dir, config.test_orc_bnd_path),
+                                     phn_map_path=phn_map_path,
+                                     name='DATA LOADER(test)',
+                                     mode='dev')
         dev_data_set.print_parameter()
+        test_data_set.print_parameter()
     else:
         # load train for evalution
         train_data_set = PickleDataset(config,
@@ -130,15 +139,15 @@ if __name__ == "__main__":
                                        phn_map_path=phn_map_path,
                                        name='DATA LOADER(evaluation train)',
                                        mode='dev')
-        dev_data_set = PickleDataset(config,
-                                     os.path.join(args.data_dir, config.dev_feat_path),
-                                     os.path.join(args.data_dir, config.dev_phn_path),
-                                     os.path.join(args.data_dir, config.dev_orc_bnd_path),
+        test_data_set = PickleDataset(config,
+                                     os.path.join(args.data_dir, config.test_feat_path),
+                                     os.path.join(args.data_dir, config.test_phn_path),
+                                     os.path.join(args.data_dir, config.test_orc_bnd_path),
                                      phn_map_path=phn_map_path,
                                      name='DATA LOADER(evaluation test)',
                                      mode='dev')
         train_data_set.print_parameter()
-        dev_data_set.print_parameter()
+        test_data_set.print_parameter()
     config.feat_dim = train_data_set.feat_dim * config.concat_window
     config.phn_size = train_data_set.phn_size
     config.mfcc_dim = train_data_set.feat_dim
@@ -172,7 +181,7 @@ if __name__ == "__main__":
         g.train(train_data_set, dev_data_set, args.aug)
         print_training_parameter(args, config)
         g.test(train_data_set, f'{args.save_dir}/train.pkl')
-        g.test(dev_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
+        g.test(test_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
 
     elif args.mode == 'load':
         print_training_parameter(args, config)
@@ -180,10 +189,14 @@ if __name__ == "__main__":
         g.train(train_data_set, dev_data_set, args.aug)
         print_training_parameter(args, config)
         g.test(train_data_set, f'{args.save_dir}/train.pkl')
-        g.test(dev_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
+        g.test(test_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
 
-    else:
+    elif args.mode == 'eval':
         g.load_ckpt(config.load_path)
         g.test(train_data_set, f'{args.save_dir}/train.pkl')
-        g.test(dev_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
+        g.test(test_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
+
+    elif args.mode == 'test_posterior':
+        g.test_posterior(train_data_set, f'{args.save_dir}/train.pkl')
+        g.test_posterior(test_data_set, f'{args.save_dir}/test.pkl') # fer is report on dev set
 

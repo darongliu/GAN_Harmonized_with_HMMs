@@ -2,9 +2,14 @@
 train_feat_path: 'timit_for_GAN/audio/timit-train-mfcc-nor.pkl'
 train_orc_bnd_path: 'timit_for_GAN/audio/timit-train-orc1-bnd.pkl'
 train_phn_path: 'timit_for_GAN/audio/timit-train-phn.pkl'
+
 dev_feat_path: 'timit_for_GAN/audio/timit-test-mfcc-nor.pkl'
 dev_orc_bnd_path: 'timit_for_GAN/audio/timit-test-orc1-bnd.pkl'
 dev_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
+
+test_feat_path: 'timit_for_GAN/audio/timit-test-mfcc-nor.pkl'
+test_orc_bnd_path: 'timit_for_GAN/audio/timit-test-orc1-bnd.pkl'
+test_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
 
 # Model
 # generator

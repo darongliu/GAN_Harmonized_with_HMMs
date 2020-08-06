@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from src.data.dataLoader import get_data_loader, get_dev_data_loader
 from src.models.gan_wrapper import GenWrapper, DisWrapper
 from src.lib.utils import gen_real_sample, pad_sequence
-from src.lib.metrics import frame_eval
+from src.lib.metrics import frame_eval, per_eval
 
 import torch_optimizer as optim # from https://github.com/jettify/pytorch-optimizer.git
 
@@ -224,6 +224,7 @@ class UnsModel(nn.Module):
         self.gen_model.eval()
         fers, fnums = 0, 0
         fers_39, fnums_39 = 0, 0
+        pers_39, pnums_39 = 0, 0
         probs = []
         # calc all phn 39 and give index
         all_p39 = list(set(dev_data_set.phn_mapping.values()))
@@ -259,19 +260,77 @@ class UnsModel(nn.Module):
                     if frame_label[i][j] != -100:
                         frame_label_39[i][j] = phn392idx[dev_data_set.phn_mapping[frame_label[i][j]]]
             frame_error_39, frame_num_39, _ = frame_eval(pred_39, frame_label_39, length)
+            phone_error_39, phone_num_39, _ = per_eval(pred_39, frame_label_39, length)
 
             fers_39 += frame_error_39
             fnums_39 += frame_num_39
+            pers_39 += phone_error_39
+            pnums_39 += phone_num_39
         step_fer = fers / fnums * 100
         step_fer_39 = fers_39 / fnums_39 * 100
+        step_per_39 = pers_39 / pnums_39 * 100
         print('fer:', step_fer)
         print('fer on phn 39: ', step_fer_39)
+        print('per on phn 39: ', step_per_39)
         if fer_result_path != '':
             with open(fer_result_path, 'w') as f:
-                f.write('frame error rate: '+str(step_fer))
-                f.write('frame error rate on phn 39: '+str(step_fer_39))
+                f.write('frame error rate: '+str(step_fer)+'\n')
+                f.write('frame error rate on phn 39: '+str(step_fer_39)+'\n')
+                f.write('phone error rate on phn 39: '+str(step_per_39)+'\n')
         print(np.array(probs).shape)
         pk.dump(np.array(probs), open(file_path, 'wb'))
+
+    def test_posterior(self, dev_data_set, file_path):
+        # do not output or write anything
+        # used to calc fer, per for already generated posterior
+        dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
+        fers, fnums = 0, 0
+        fers_39, fnums_39 = 0, 0
+        pers_39, pnums_39 = 0, 0
+
+        all_probs = pk.load(open(file_path, 'rb'))
+
+        # calc all phn 39 and give index
+        all_p39 = list(set(dev_data_set.phn_mapping.values()))
+        phn392idx = dict(zip(all_p39, range(len(all_p39))))
+
+        count = 0
+        for _, frame_label, length in dev_source:
+            prob = all_probs[count:count+len(length)]
+            count += len(length)
+            pred = prob.argmax(-1)
+            frame_label = frame_label.numpy()
+            frame_error, frame_num, _ = frame_eval(pred, frame_label, length)
+
+            fers += frame_error
+            fnums += frame_num
+
+            # 39
+            pred_39 = np.zeros_like(pred)
+            l, w  = pred.shape
+            for i in range(l):
+                for j in range(w):
+                    pred_39[i][j] = phn392idx[dev_data_set.phn_mapping[pred[i][j]]]
+
+            frame_label_39 = np.zeros_like(frame_label)
+            l, w  = frame_label.shape
+            for i in range(l):
+                for j in range(w):
+                    if frame_label[i][j] != -100:
+                        frame_label_39[i][j] = phn392idx[dev_data_set.phn_mapping[frame_label[i][j]]]
+            frame_error_39, frame_num_39, _ = frame_eval(pred_39, frame_label_39, length)
+            phone_error_39, phone_num_39, _ = per_eval(pred_39, frame_label_39, length)
+
+            fers_39 += frame_error_39
+            fnums_39 += frame_num_39
+            pers_39 += phone_error_39
+            pnums_39 += phone_num_39
+        step_fer = fers / fnums * 100
+        step_fer_39 = fers_39 / fnums_39 * 100
+        step_per_39 = pers_39 / pnums_39 * 100
+        print('fer:', step_fer)
+        print('fer on phn 39: ', step_fer_39)
+        print('per on phn 39: ', step_per_39)
 
     def save_ckpt(self):
         ckpt_path = os.path.join(self.config.save_path, "ckpt_{}.pth".format(self.step))
