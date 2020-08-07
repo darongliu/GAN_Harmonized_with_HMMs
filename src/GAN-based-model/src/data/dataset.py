@@ -71,6 +71,7 @@ class PickleDataset(Dataset):
                     self.phn_max_length  = v.phn_max_length    # max length of phone sequence
                     self.feat_max_length = v.feat_max_length   # max length of feat sequence
                     self.sample_var      = v.sample_var
+                    self.target_augment_prob = v.target_augment_prob
                 else:
                     setattr(self, k, v)
 
@@ -136,7 +137,7 @@ class PickleDataset(Dataset):
                                         self.train_bnd,
                                         self.train_bnd_range,
                                         self.train_seq_length)
-            self.target = TargetDataset(self.target_data)
+            self.target = TargetDataset(self.target_data, self.sil_idx, augment_prob=self.target_augment_prob)
         self.dev = DevDataset(self.feats, self.frame_labels)
 
     def print_parameter(self, target=False):
@@ -158,16 +159,29 @@ class PickleDataset(Dataset):
 
 
 class TargetDataset(Dataset):
-    def __init__(self, target_data):
+    def __init__(self, target_data, sil_idx, augment_prob=None):
         self.target_data = target_data
+        self.sil_idx = sil_idx
+        self.augment_prob = augment_prob
 
     def __len__(self):
         return len(self.target_data)
 
     def __getitem__(self, index):
-        feat = self.target_data[index]
+        feat = self._data_augmentation(self.target_data[index])
         return feat, len(feat)
 
+    def _data_augmentation(self, seq):
+        if self.augment_prob is None or self.augment_prob == 'None':
+            return seq
+        new_seq = [] 
+        for s in seq:
+            if s == self.sil_idx:
+                # new_seq.extend([s]*np.random.choice([0, 1, 2], p=[0.04, 0.8, 0.16]))
+                new_seq.extend([s])
+            else:
+                new_seq.extend([s]*np.random.choice(list(range(len(self.augment_prob))), p=self.augment_prob))
+        return torch.tensor(new_seq)
 
 class SourceDataset(Dataset):
     def __init__(self, feats, train_bnd, train_bnd_range, train_seq_length):

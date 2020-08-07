@@ -57,10 +57,12 @@ def get_data_loader(dataset, batch_size, repeat=6, random_batch=True, shuffle=Fa
     if random_batch:
         source = DataLoader(dataset.source,
                             batch_sampler=RandomBatchSampler(dataset.source, batch_size//2),
-                            collate_fn=source_collate_fn)
+                            collate_fn=source_collate_fn,
+                            num_workers=8)
         target = DataLoader(dataset.target,
                             batch_sampler=RandomBatchSampler(dataset.target, batch_size*repeat),
-                            collate_fn=target_collate_fn)
+                            collate_fn=target_collate_fn,
+                            num_workers=8)
     return source, target
 
 def get_dev_data_loader(dataset, batch_size, shuffle=False, drop_last=False):

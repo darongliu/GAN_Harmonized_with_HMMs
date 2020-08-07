@@ -20,6 +20,7 @@ penalty_ratio: 10
 frame_temp: 0.9
 
 # discriminator
+target_augment_prob: 'None' # 'None' # [0.04, 0.84, 0.11, 0.01]
 use_maxlen: True # True, False
 model_type: 'transformer' # cnn, weak_cnn, lstm, transformer
 cnn:
