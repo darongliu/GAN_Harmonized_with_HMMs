@@ -19,7 +19,7 @@ fi
 ### Training Process
 for iteration in $(seq 1 $total_iter); do
   ### train GAN model
-  hrun -G -c 8 -m 32 bash -c '. ./cmd.sh; . ./path.sh; . ./config_battleship.sh; cd src; bash train_GAN.sh '$iteration' '$gan_config' '$overall_prefix || exit 1
+  hrun -G -c $jobs -m 32 bash -c '. ./cmd.sh; . ./path.sh; . ./config_battleship.sh; cd src; bash train_GAN.sh '$iteration' '$gan_config' '$overall_prefix || exit 1
 
   ### wfst decoder
   hrun -c $jobs -m 64   bash -c '. ./cmd.sh; . ./path.sh; . ./config_battleship.sh; cd src; bash train_wfst.sh '$iteration' '$overall_prefix || exit 1
