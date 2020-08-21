@@ -57,8 +57,11 @@ class DisWrapper(nn.Module):
             real: list of (len, phn_size)
             fake: list of (len, phn_size)
         """
-        real = pad_sequence(real, max_len=self.model.max_len)
-        fake = pad_sequence(fake, max_len=self.model.max_len)
+        if self.model.max_len is not None:
+            real = pad_sequence(real, max_len=self.model.max_len)
+            fake = pad_sequence(fake, max_len=self.model.max_len)
+            real_len = torch.clamp(real_len, 0, self.model.max_len)
+            fake_len = torch.clamp(fake_len, 0, self.model.max_len)
 
         if self.model_type == 'lstm':
             real, real_len = self._sort_sequences(real, real_len)
@@ -76,8 +79,11 @@ class DisWrapper(nn.Module):
             real: list of (len, phn_size)
             fake: list of (len, phn_size)
         """
-        real = pad_sequence(real, max_len=self.model.max_len)
-        fake = pad_sequence(fake, max_len=self.model.max_len)
+        if self.model.max_len is not None:
+            real = pad_sequence(real, max_len=self.model.max_len)
+            fake = pad_sequence(fake, max_len=self.model.max_len)
+            real_len = torch.clamp(real_len, 0, self.model.max_len)
+            fake_len = torch.clamp(fake_len, 0, self.model.max_len)
 
         if self.model_type == 'lstm':
             real, real_len = self._sort_sequences(real, real_len)
