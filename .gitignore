@@ -138,3 +138,6 @@ dmypy.json
 cython_debug/
 data/
 temp/
+
+timit/
+.vscode
