@@ -1,3 +1,4 @@
+#!/bin/bash
 # This script does decoding with a transition model
 
 # Begin configuration section.
