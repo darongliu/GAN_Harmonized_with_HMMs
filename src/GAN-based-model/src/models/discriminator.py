@@ -4,9 +4,14 @@ import torch.nn.functional as F
 import numpy as np
 
 from src.lib.utils import get_mask_from_lengths
+from src.lib.modules import Conv1dWrapper
+from src.lib.posterior_processing import *
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+SECOND_CONV_NUM = 4
+FIRST_CONV_MIN_KERNEL = 3
+SECOND_CONV_KERNEL = 3
 
 class ResBlock(nn.Module):
     def __init__(self, idim, odim, kernel, use_batchnorm, res=True):
@@ -92,34 +97,35 @@ class WeakDiscriminator(nn.Module):
     Arguments:
         dim: channels
     """
-    def __init__(self, phn_size, dis_emb_dim, hidden_dim1, hidden_dim2, use_second_conv=True, max_len=None):
+    def __init__(self, phn_size, dis_emb_dim, hidden_dim1, hidden_dim2, use_second_conv=True, max_len=None,
+                 max_conv_bank_kernel=9, window_per_phn=3, local_discriminate=False, **kwargs):
+        # max_conv_kernel: means conv bank kernel is 3,5,...max_conv_kernel
         super().__init__()
         self.max_len = max_len
         self.emb_bag = nn.Embedding(phn_size, dis_emb_dim)
         self.use_second_conv = use_second_conv
+        self.max_conv_bank_kernel = max_conv_bank_kernel
+        self.window_per_phn = window_per_phn
+        self.local_discriminate = local_discriminate
 
-        self.conv_1 = nn.ModuleList([
-            nn.Conv1d(dis_emb_dim, hidden_dim1, 3, padding=1),
-            nn.Conv1d(dis_emb_dim, hidden_dim1, 5, padding=2),
-            nn.Conv1d(dis_emb_dim, hidden_dim1, 7, padding=3),
-            nn.Conv1d(dis_emb_dim, hidden_dim1, 9, padding=4),
-        ])
+        assert(max_conv_bank_kernel % 2 == 1)
+        self.conv_1 = nn.ModuleList([Conv1dWrapper(dis_emb_dim, hidden_dim1, k) for k in range(FIRST_CONV_MIN_KERNEL, max_conv_bank_kernel + 1, 2)])
         self.lrelu_1 = nn.LeakyReLU()
         if use_second_conv:
-            self.conv_2 = nn.ModuleList([
-                nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
-                nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
-                nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
-                nn.Conv1d(4*hidden_dim1, hidden_dim2, 3, padding=1),
-            ])
+            self.conv_2 = nn.ModuleList([Conv1dWrapper(len(self.conv_1) * hidden_dim1, hidden_dim2, SECOND_CONV_KERNEL) for i in range(SECOND_CONV_NUM)])
             self.lrelu_2 = nn.LeakyReLU()
         self.flatten = nn.Flatten()
 
-        hidden_dim = hidden_dim2 if use_second_conv else hidden_dim1
-        if max_len is not None:
-            self.linear = nn.Linear(max_len*4*hidden_dim, 1)
+        if not self.local_discriminate:
+            hidden_dim = hidden_dim2 if use_second_conv else hidden_dim1
+            if max_len is not None:
+                    self.linear = nn.Linear(max_len * SECOND_CONV_NUM * hidden_dim, 1)
+            else:
+                    self.linear = nn.Linear(SECOND_CONV_NUM * hidden_dim, 1)
         else:
-            self.linear = nn.Linear(4*hidden_dim, 1)
+            hidden_dim = SECOND_CONV_NUM * hidden_dim2 if use_second_conv else len(self.conv_1) * hidden_dim1
+            self.linear = nn.Linear(hidden_dim, 1)        
+
         self._spec_init()
 
     def _spec_init(self):
@@ -142,22 +148,47 @@ class WeakDiscriminator(nn.Module):
         outputs = outputs * mask
         return outputs.sum(1) / mask.sum(1)
     
-    def forward(self, inputs, inputs_len=None):
+    def forward(self, inputs, inputs_len=None, posteriors=None):
         outputs = self.embedding(inputs)
-        outputs = outputs.transpose(1, 2)
-        outputs = torch.cat([conv(outputs) for conv in self.conv_1], dim=1)
+
+        if posteriors is not None:
+            locations = posteriors_to_locations(posteriors, self.max_conv_bank_kernel, self.window_per_phn)
+            # locations: (batch_size, seqlen, kernel_size, window_size)
+            outputs = locations_to_neighborhood(outputs, locations)
+            # outputs: (batch_size, seqlen, kernel_size, class_num)
+
+        outputs = torch.cat([conv(outputs) for conv in self.conv_1], dim=-1)
         outputs = self.lrelu_1(outputs)
+        # outputs: (batch_size, seqlen, featdim)
+        
         if self.use_second_conv:
-            outputs = torch.cat([conv(outputs) for conv in self.conv_2], dim=1)
+
+            if posteriors is not None:
+                center = (locations.size(2) - 1) // 2
+                half_kernel_size = (SECOND_CONV_KERNEL - 1) // 2
+                start, end = center - half_kernel_size, center + half_kernel_size + 1
+                outputs = locations_to_neighborhood(outputs, locations[:, :, start:end, :])
+
+            outputs = torch.cat([conv(outputs) for conv in self.conv_2], dim=-1)
             outputs = self.lrelu_2(outputs)
-        outputs = outputs.transpose(1, 2)
-        if self.max_len is not None:
-            # (B, T, D) -> (B, T*D)
-            outputs = self.flatten(outputs)
+            # outputs: (batch_size, seqlen, featdim)
+        
+        if not self.local_discriminate:
+            if self.max_len is not None:
+                # (B, T, D) -> (B, T*D)
+                outputs = self.flatten(outputs)
+            else:
+                # (B, T, D) -> (B, D)
+                outputs = self.mask_pool(outputs, inputs_len)
+            outputs = self.linear(outputs).squeeze(-1)
         else:
-            # (B, T, D) -> (B, D)
-            outputs = self.mask_pool(outputs, inputs_len)
-        outputs = self.linear(outputs)
+            scores = self.linear(outputs).squeeze(-1)
+            # scores: (batch_size, seqlen)
+
+            length_masks = torch.lt(torch.arange(inputs_len.max().item()).unsqueeze(0), inputs_len.unsqueeze(1)).to(inputs.device)
+            scores = scores * length_masks
+
+            outputs = scores.sum(dim=-1) / inputs_len.to(inputs.device)
         return outputs
 
 if __name__ == '__main__':

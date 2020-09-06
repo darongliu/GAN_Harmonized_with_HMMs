@@ -86,7 +86,8 @@ class UnsModel(nn.Module):
 
         if train_generator:
             g_loss = self.dis_model.calc_g_loss(real_sample, target_len,
-                                                fake_sample, sample_len)
+                                                fake_sample, sample_len,
+                                                prob if no_boundary else None)
             
             seg_loss = torch.zeros(1).to(device)
             if not no_boundary:
@@ -100,7 +101,8 @@ class UnsModel(nn.Module):
         
         else:
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
-                                                         fake_sample, sample_len)
+                                                         fake_sample, sample_len,
+                                                         prob if no_boundary else None)
             
             return d_loss + self.config.penalty_ratio*gp_loss, gp_loss
 
@@ -114,7 +116,8 @@ class UnsModel(nn.Module):
         #
         train_source, train_target = get_data_loader(train_data_set,
                                                      batch_size=self.config.batch_size,
-                                                     repeat=self.config.repeat)
+                                                     repeat=self.config.repeat,
+                                                     no_boundary=no_boundary)
         train_source, train_target = iter(train_source), iter(train_target)
 
         gen_loss, dis_loss, seg_loss, gp_loss = 0, 0, 0, 0

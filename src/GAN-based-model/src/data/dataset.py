@@ -96,12 +96,16 @@ class PickleDataset(Dataset):
         half_window = (self.concat_window-1) // 2
         self.feat_dim = feats[0].shape[-1]
         self.feats = []
+        self.feats_length = []
         for feat in feats:
+            # add padding at the beginning and the ending
             _feat_ = np.concatenate([np.tile(feat[0], (half_window, 1)), feat,
                                      np.tile(feat[-1], (half_window, 1))], axis=0)
+            # sliding window of kernel_size=self.concat_window
             feature = torch.tensor([np.reshape(_feat_[l : l+self.concat_window], [-1])
                                     for l in range(len(feat))])[:self.feat_max_length]
             self.feats.append(feature)
+            self.feats_length.append(len(feature))
 
     def process_label(self, orc_bnd, phn_label):
         assert len(orc_bnd) == len(phn_label) == self.data_length
@@ -134,6 +138,7 @@ class PickleDataset(Dataset):
     def create_datasets(self, mode):
         if mode == 'train':
             self.source = SourceDataset(self.feats,
+                                        self.feats_length,
                                         self.train_bnd,
                                         self.train_bnd_range,
                                         self.train_seq_length)
@@ -184,22 +189,24 @@ class TargetDataset(Dataset):
         return torch.tensor(new_seq)
 
 class SourceDataset(Dataset):
-    def __init__(self, feats, train_bnd, train_bnd_range, train_seq_length):
+    def __init__(self, feats, feats_length, train_bnd, train_bnd_range, train_seq_length):
         self.feats = feats
+        self.feats_length = feats_length
         self.train_bnd = train_bnd
         self.train_bnd_range = train_bnd_range
         self.train_seq_length = train_seq_length
-        assert len(feats) == len(train_bnd) == len(train_bnd_range) == len(train_seq_length)
+        assert len(feats) == len(feats_length) == len(train_bnd) == len(train_bnd_range) == len(train_seq_length)
 
     def __len__(self):
         return len(self.feats)
 
     def __getitem__(self, index):
         feat = self.feats[index]
+        feat_length = self.feats_length[index]
         train_bnd = self.train_bnd[index]
         train_bnd_range = self.train_bnd_range[index]
         train_seq_length = self.train_seq_length[index]
-        return feat, train_bnd, train_bnd_range, train_seq_length
+        return feat, feat_length, train_bnd, train_bnd_range, train_seq_length
 
 
 class DevDataset(Dataset):

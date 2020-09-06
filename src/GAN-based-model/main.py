@@ -86,6 +86,11 @@ if __name__ == "__main__":
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_id
 
+    no_boundary = False
+    if args.bnd_type == 'posterior':
+        args.bnd_type = 'orc'
+        no_boundary = True
+
     if args.iteration == 1:
         train_bnd_path    = f'{args.data_dir}/timit_for_GAN/audio/timit-train-{args.bnd_type}{args.iteration}-bnd.pkl'
     else:
@@ -178,7 +183,7 @@ if __name__ == "__main__":
 
     if args.mode == 'train':
         print_training_parameter(args, config)
-        g.train(train_data_set, dev_data_set, args.aug)
+        g.train(train_data_set, dev_data_set, args.aug, no_boundary)
         print_training_parameter(args, config)
         g.test(train_data_set, f'{args.save_dir}/train.pkl')
         g.test(test_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set

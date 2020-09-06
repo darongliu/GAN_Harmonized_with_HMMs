@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Prenet(nn.Module):
@@ -149,3 +150,45 @@ class ResBlock(nn.Module):
         y1 = self.cn1(x, lengths)
         y2 = self.cn2(y1, lengths)
         return y1 + y2
+
+
+class Conv1dWrapper(nn.Module):
+    def __init__(self, in_channel, out_channel, kernel_size):
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(out_channel, in_channel, kernel_size))
+        self.bias = nn.Parameter(torch.randn(out_channel))
+        self.kernel_size = kernel_size
+
+    def forward(self, features):
+        """
+        Arguments:
+            features:
+                (batch_size, seqlen, in_channel)
+                (batch_size, seqlen, in_kernel_size, in_channel):
+                    in_kernel_size >= self.kernel_size
+        Outputs:
+            local_feats:
+                (batch_size, seqlen, out_channel)
+        """
+        
+        half_kernel = (self.kernel_size - 1) // 2
+        
+        feats = features
+        padding = half_kernel
+        if features.dim() == 4:
+            assert self.kernel_size <= features.size(2)
+            center = (features.size(2) - 1) // 2
+            start = center - half_kernel
+            feats = feats.reshape(-1, *feats.shape[-2:])
+            feats = feats[:, start : start + self.kernel_size, :]
+            padding = 0
+        
+        local_feats = F.conv1d(feats.transpose(1, 2), self.weight, self.bias, padding=padding).transpose(1, 2)
+
+        if features.dim() == 4:
+            # local_feats: (batch_size * seqlen, 1, out_channel)
+            local_feats = local_feats.reshape(features.size(0), -1, local_feats.size(-1))
+        # local_feats: (batch_size, seqlen, out_channel)
+        assert local_feats.size(1) == features.size(1)
+
+        return local_feats
