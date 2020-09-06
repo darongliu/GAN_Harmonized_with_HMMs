@@ -62,7 +62,7 @@ class UnsModel(nn.Module):
         sys.stdout.flush()
 
     def forward(self, sample_feat, sample_len, target_idx, target_len, frame_temp,
-                intra_diff_num=None):
+                intra_diff_num=None, no_boundary=False, train_generator=True):
         sample_feat = sample_feat.to(device)
 
         prob, soft_prob, hard_prob = self.gen_model(sample_feat, frame_temp, sample_len)
@@ -84,25 +84,28 @@ class UnsModel(nn.Module):
         
         real_sample = gen_real_sample(target_idx, target_len, self.config.phn_size).to(device)
 
-        if intra_diff_num is not None:
-            # generator
-            batch_size = fake_sample.size(0) // 2
-            intra_diff_num = intra_diff_num.to(device)
-
+        if train_generator:
             g_loss = self.dis_model.calc_g_loss(real_sample, target_len,
                                                 fake_sample, sample_len)
-            seg_loss = self.gen_model.calc_intra_loss(intra_sample[:batch_size],
-                                                      intra_sample[batch_size:],
-                                                      intra_diff_num)
+            
+            seg_loss = torch.zeros(1).to(device)
+            if not no_boundary:
+                batch_size = fake_sample.size(0) // 2
+                intra_diff_num = intra_diff_num.to(device)
+                seg_loss = self.gen_model.calc_intra_loss(intra_sample[:batch_size],
+                                                          intra_sample[batch_size:],
+                                                          intra_diff_num)
+            
             return g_loss + self.config.seg_loss_ratio*seg_loss, seg_loss, fake_sample
-
+        
         else:
-            # discriminator
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
                                                          fake_sample, sample_len)
+            
             return d_loss + self.config.penalty_ratio*gp_loss, gp_loss
 
-    def train(self, train_data_set, dev_data_set=None, aug=False):
+
+    def train(self, train_data_set, dev_data_set=None, aug=False, no_boundary=False):
         print ('TRAINING(unsupervised)...')
         self.log_writer = SummaryWriter(self.config.save_path)
 
@@ -135,7 +138,8 @@ class UnsModel(nn.Module):
 
                 dis_loss, gp_loss = self.forward(sample_feat, sample_len,
                                                  target_idx, target_len,
-                                                 frame_temp)
+                                                 frame_temp, intra_diff_num,
+                                                 no_boundary, False)
                 dis_loss.backward()
                 d_clip_grad = nn.utils.clip_grad_norm_(self.dis_model.parameters(), 5.0)
                 self.dis_optim.step()
@@ -157,7 +161,8 @@ class UnsModel(nn.Module):
 
                 gen_loss, seg_loss, fake_sample = self.forward(sample_feat, sample_len,
                                                                target_idx, target_len,
-                                                               frame_temp, intra_diff_num)
+                                                               frame_temp, intra_diff_num,
+                                                               no_boundary, True)
                 gen_loss.backward()
                 g_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
                 self.gen_optim.step()
