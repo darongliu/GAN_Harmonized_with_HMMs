@@ -70,20 +70,7 @@ def posteriors_to_locations(posteriors, kernel_size, window_per_phn):
     return [left_locations, right_locations]
 
 
-def locations_to_full_locations(locations):
-    left_locations, right_locations = locations
-    batch_size, seqlen, half_kernel_size, half_window_size = left_locations.shape
-
-    full_locations = left_locations.new_zeros(batch_size, seqlen, 2 * half_kernel_size + 1, 2 * half_window_size + 1)
-    full_locations[:, :, half_kernel_size, half_window_size] = 1
-    if half_kernel_size > 0:
-        full_locations[:, :, :half_kernel_size, :half_window_size] = left_locations
-        full_locations[:, :, half_kernel_size+1:, half_window_size+1:] = right_locations
-
-    return full_locations
-
-
-def locations_to_neighborhood(features, locations):
+def locations_to_neighborhood(features, locations, out_kernel_size=None):
     """
     Arguments:
         features:
@@ -98,6 +85,8 @@ def locations_to_neighborhood(features, locations):
         neighborhood:
             (batch_size, seqlen, kernel_size, feat_dim)
     """
+    locations = slice_locations(locations, out_kernel_size)
+
     left_locations, right_locations = locations
     batch_size, seqlen, feat_dim = features.shape
     _, _, half_kernel_size, half_window_size = left_locations.shape
@@ -121,6 +110,34 @@ def locations_to_neighborhood(features, locations):
     return neighborhood
 
 
+def slice_locations(locations, out_kernel_size=None):
+    if out_kernel_size is None:
+        return locations
+
+    left_locations, right_locations = locations
+    out_half_kernel_size = (out_kernel_size - 1) // 2
+    out_half_window_size = left_locations.size(-1) // left_locations.size(-2) * out_half_kernel_size
+    left_locations = left_locations[:, :, -out_half_kernel_size:, -out_half_window_size:]
+    right_locations = right_locations[:, :, :out_half_kernel_size, :out_half_window_size]
+
+    return [left_locations, right_locations]
+
+
+def locations_to_full_locations(locations, out_kernel_size=None):
+    locations = slice_locations(locations, out_kernel_size)
+
+    left_locations, right_locations = locations
+    batch_size, seqlen, half_kernel_size, half_window_size = left_locations.shape
+
+    full_locations = left_locations.new_zeros(batch_size, seqlen, 2 * half_kernel_size + 1, 2 * half_window_size + 1)
+    full_locations[:, :, half_kernel_size, half_window_size] = 1
+    if half_kernel_size > 0:
+        full_locations[:, :, :half_kernel_size, :half_window_size] = left_locations
+        full_locations[:, :, half_kernel_size+1:, half_window_size+1:] = right_locations
+
+    return full_locations
+
+
 if __name__ == '__main__':
     import os
     import sys
@@ -135,6 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=50)
     parser.add_argument('--phn_num', type=int, default=4)
     parser.add_argument('--kernel_size', type=int, default=9)
+    parser.add_argument('--out_kernel_size', type=int, default=5)
     parser.add_argument('--window_per_phn', type=int, default=7)
     parser.add_argument('--idx', type=int, default=50)
     args = parser.parse_args()
@@ -151,7 +169,7 @@ if __name__ == '__main__':
     print(f'Calculate locations: {time() - start}')
     
     start = time()
-    padding = phones_onehot.new_zeros(args.batch_size, (args.kernel_size - 1) // 2 * args.window_per_phn, args.phn_num)
+    padding = phones_onehot.new_zeros(args.batch_size, (args.out_kernel_size - 1) // 2 * args.window_per_phn, args.phn_num)
     padded_phones_onehot = torch.cat([padding, phones_onehot, padding], dim=1)
     is_boundaries = 1 - (padded_phones_onehot[:, :-1, :] * padded_phones_onehot[:, 1:, :]).sum(dim=-1)
 
@@ -160,8 +178,8 @@ if __name__ == '__main__':
     padded_seqlen = padded_phones_onehot.size(1)
 
     select_instance = 0
-    full_locations = locations_to_full_locations(locations)
-    for k in range(args.kernel_size):
+    full_locations = locations_to_full_locations(locations, args.out_kernel_size)
+    for k in range(args.out_kernel_size):
         location = full_locations[select_instance, args.idx, k, :].detach().cpu()
         half_window = (location.size(-1) - 1) // 2
         abs_start = args.idx - half_window + padding_seqlen
@@ -182,7 +200,7 @@ if __name__ == '__main__':
     print(f'Draw location distributions: {time() - start}')
 
     start = time()
-    neighborhood = locations_to_neighborhood(phones_onehot, locations).detach().cpu()
+    neighborhood = locations_to_neighborhood(phones_onehot, locations, args.out_kernel_size).detach().cpu()
     print(f'Calculate posterior-neighborhood: {time() - start}')
 
     start = time()
@@ -190,9 +208,9 @@ if __name__ == '__main__':
     phoneseq_onehot = F.one_hot(phoneseq, num_classes=args.phn_num).unsqueeze(0).expand(args.batch_size, -1, -1)
     phoneseq_unfolded = F.unfold(
         phoneseq_onehot.float().transpose(1, 2).unsqueeze(-1),
-        kernel_size=(args.kernel_size, 1),
-        padding=((args.kernel_size - 1) // 2, 0),
-    ).long().view(args.batch_size, args.phn_num, args.kernel_size, -1).transpose(1, 3)
+        kernel_size=(args.out_kernel_size, 1),
+        padding=((args.out_kernel_size - 1) // 2, 0),
+    ).long().view(args.batch_size, args.phn_num, args.out_kernel_size, -1).transpose(1, 3)
 
     pivot = 0
     real_neighborhood = [phoneseq_unfolded[:, pivot, :, :]]

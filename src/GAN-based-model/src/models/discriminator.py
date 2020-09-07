@@ -164,10 +164,7 @@ class WeakDiscriminator(nn.Module):
         if self.use_second_conv:
 
             if posteriors is not None:
-                center = (locations.size(2) - 1) // 2
-                half_kernel_size = (SECOND_CONV_KERNEL - 1) // 2
-                start, end = center - half_kernel_size, center + half_kernel_size + 1
-                outputs = locations_to_neighborhood(outputs, locations[:, :, start:end, :])
+                outputs = locations_to_neighborhood(outputs, locations, SECOND_CONV_KERNEL)
 
             outputs = torch.cat([conv(outputs) for conv in self.conv_2], dim=-1)
             outputs = self.lrelu_2(outputs)
