@@ -32,9 +32,9 @@ def posteriors_to_right_locations(posteriors, half_kernel_size, window_per_phn):
 
     for j in range(1, half_kernel_size):
         windows = []
-        for i in range(j * window_per_phn):
+        for i in range(window_per_phn):
             window = posteriors.new_zeros(*locations[0].shape)
-            window[:, :seqlen, i+1:window_per_phn+i+1] = locations[j-1][:, :seqlen, i:i+1] * locations[0][:, i+1:seqlen+i+1, :window_per_phn]
+            window[:, :seqlen, i+1:j*window_per_phn+i+1] = locations[j-1][:, i+1:seqlen+i+1, :j*window_per_phn] * locations[0][:, :seqlen, i:i+1]
             windows.append(window)
         locations.append(torch.stack(windows, dim=0).sum(dim=0))
 
