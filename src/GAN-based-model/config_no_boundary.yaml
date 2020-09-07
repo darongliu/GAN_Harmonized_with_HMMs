@@ -44,7 +44,6 @@ weak_cnn:
   hidden_dim1: 256
   hidden_dim2: 256
   use_second_conv: True
-  local_discriminate: True
   window_per_phn: 3
 
 # Data loader

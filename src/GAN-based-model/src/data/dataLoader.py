@@ -91,9 +91,9 @@ class RandomBatchSampler(BatchSampler):
         return len(self.data_source)
 
 
-def get_data_loader(dataset, batch_size, repeat=6, sample_range=[2,5], no_boundary=False, random_batch=True, shuffle=False, drop_last=True):
+def get_data_loader(dataset, batch_size, repeat=6, sample_range=[2,5], use_posterior_bnd=False, random_batch=True, shuffle=False, drop_last=True):
     assert random_batch
-    if no_boundary:
+    if use_posterior_bnd:
         source_collate_fn = partial(_collate_non_segmented_source_fn, repeat=repeat, sample_range=sample_range)
         src_batch_size = batch_size
         tgt_batch_size = batch_size * repeat
@@ -162,7 +162,7 @@ if __name__ == '__main__':
     train_source, train_target = get_data_loader(train_data_set,
                                                 batch_size=config.batch_size,
                                                 repeat=config.repeat,
-                                                no_boundary=True)
+                                                use_posterior_bnd=True)
 
     train_source, train_target = iter(train_source), iter(train_target)
 

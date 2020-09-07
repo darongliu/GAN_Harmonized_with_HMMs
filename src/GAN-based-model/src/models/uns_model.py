@@ -21,13 +21,14 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class UnsModel(nn.Module):
 
-    def __init__(self, config):
+    def __init__(self, config, use_posterior_bnd=False):
         super().__init__()
         cout_word = 'UNSUPERVISED MODEL: building    '
         sys.stdout.write(cout_word)
         sys.stdout.flush()
 
         self.config = config
+        self.use_posterior_bnd = use_posterior_bnd
         self.step = 0
 
         self.gen_model = GenWrapper(config.feat_dim,
@@ -38,6 +39,7 @@ class UnsModel(nn.Module):
         self.dis_model = DisWrapper(phn_size=config.phn_size,
                                     max_len=max_len,
                                     model_type=model_type,
+                                    use_posterior_bnd=use_posterior_bnd,
                                     **config[model_type]).to(device)
 
         if config.optimizer == 'radam':
@@ -62,7 +64,7 @@ class UnsModel(nn.Module):
         sys.stdout.flush()
 
     def forward(self, sample_feat, sample_len, target_idx, target_len, frame_temp,
-                intra_diff_num=None, no_boundary=False, train_generator=True):
+                intra_diff_num=None, train_generator=True):
         sample_feat = sample_feat.to(device)
 
         prob, soft_prob, hard_prob = self.gen_model(sample_feat, frame_temp, sample_len)
@@ -87,10 +89,10 @@ class UnsModel(nn.Module):
         if train_generator:
             g_loss = self.dis_model.calc_g_loss(real_sample, target_len,
                                                 fake_sample, sample_len,
-                                                prob if no_boundary else None)
+                                                prob if self.use_posterior_bnd else None)
             
             seg_loss = torch.zeros(1).to(device)
-            if not no_boundary:
+            if not self.use_posterior_bnd:
                 batch_size = fake_sample.size(0) // 2
                 intra_diff_num = intra_diff_num.to(device)
                 seg_loss = self.gen_model.calc_intra_loss(intra_sample[:batch_size],
@@ -102,12 +104,12 @@ class UnsModel(nn.Module):
         else:
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
                                                          fake_sample, sample_len,
-                                                         prob if no_boundary else None)
+                                                         prob if self.use_posterior_bnd else None)
             
             return d_loss + self.config.penalty_ratio*gp_loss, gp_loss
 
 
-    def train(self, train_data_set, dev_data_set=None, aug=False, no_boundary=False):
+    def train(self, train_data_set, dev_data_set=None, aug=False):
         print ('TRAINING(unsupervised)...')
         self.log_writer = SummaryWriter(self.config.save_path)
 
@@ -117,7 +119,7 @@ class UnsModel(nn.Module):
         train_source, train_target = get_data_loader(train_data_set,
                                                      batch_size=self.config.batch_size,
                                                      repeat=self.config.repeat,
-                                                     no_boundary=no_boundary)
+                                                     use_posterior_bnd=self.use_posterior_bnd)
         train_source, train_target = iter(train_source), iter(train_target)
 
         gen_loss, dis_loss, seg_loss, gp_loss = 0, 0, 0, 0
@@ -142,7 +144,7 @@ class UnsModel(nn.Module):
                 dis_loss, gp_loss = self.forward(sample_feat, sample_len,
                                                  target_idx, target_len,
                                                  frame_temp, intra_diff_num,
-                                                 no_boundary, False)
+                                                 train_generator=False)
                 dis_loss.backward()
                 d_clip_grad = nn.utils.clip_grad_norm_(self.dis_model.parameters(), 5.0)
                 self.dis_optim.step()
@@ -165,7 +167,7 @@ class UnsModel(nn.Module):
                 gen_loss, seg_loss, fake_sample = self.forward(sample_feat, sample_len,
                                                                target_idx, target_len,
                                                                frame_temp, intra_diff_num,
-                                                               no_boundary, True)
+                                                               train_generator=True)
                 gen_loss.backward()
                 g_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
                 self.gen_optim.step()

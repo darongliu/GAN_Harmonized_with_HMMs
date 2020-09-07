@@ -12,7 +12,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class DisWrapper(nn.Module):
-    def __init__(self, phn_size, max_len, model_type, **model_config):
+    def __init__(self, phn_size, max_len, model_type, use_posterior_bnd=False, **model_config):
         super().__init__()
         self.model_type = model_type
         if model_type == 'cnn':
@@ -22,7 +22,7 @@ class DisWrapper(nn.Module):
         elif model_type == 'transformer':
             self.model = TransformerDiscriminator(phn_size=phn_size, **model_config, max_len=max_len)
         else:
-            self.model = WeakDiscriminator(phn_size=phn_size, **model_config, max_len=max_len)
+            self.model = WeakDiscriminator(phn_size=phn_size, local_discriminate=use_posterior_bnd, **model_config, max_len=max_len)
 
     def calc_gp(self, real, real_len, fake, fake_len):
         """

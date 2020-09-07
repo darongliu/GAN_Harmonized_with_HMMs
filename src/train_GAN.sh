@@ -2,6 +2,7 @@
 iteration=$1
 gan_config=$2
 overall_prefix=$3
+use_posterior_bnd=$4
 
 prefix=${overall_prefix}${bnd_type}_iter${iteration}_${setting}_gan
 
@@ -19,7 +20,8 @@ python3 main.py --mode train --cuda_id 0 \
                --save_dir $DATA_PATH/save/${prefix} \
                --config $gan_config \
                --prefix $prefix \
-               --overall_prefix $overall_prefix
+               --overall_prefix $overall_prefix \
+               --use_posterior_bnd $use_posterior_bnd
 
 #python3 main.py --mode test --cuda_id 0 \
                #--bnd_type $bnd_type --iteration $iteration \

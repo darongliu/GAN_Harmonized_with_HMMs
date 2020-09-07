@@ -26,8 +26,19 @@ fi
 cd src
 
 for iteration in $(seq 1 $total_iter); do
+  ### decide use_posterior_bnd or not
+  if [ $bnd_type == orc ]; then
+     use_posterior_bnd=0
+  else
+    use_posterior_bnd="use_posterior_bnd_iter$iteration"
+    use_posterior_bnd=${!use_posterior_bnd}
+    if [ -z $use_posterior_bnd ]; then
+      use_posterior_bnd=0
+    fi
+  fi
+
   ### train GAN model
-  bash train_GAN.sh  $iteration $gan_config $overall_prefix || exit 1
+  bash train_GAN.sh  $iteration $gan_config $overall_prefix $use_posterior_bnd || exit 1
 
   ### wfst decoder
   bash train_wfst.sh $iteration $overall_prefix|| exit 1
