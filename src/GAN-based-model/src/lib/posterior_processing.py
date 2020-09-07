@@ -13,7 +13,8 @@ def posteriors_to_right_locations(posteriors, half_kernel_size, window_per_phn):
     Outputs:
         locations:
             (batch_size, seqlen, half_kernel_size, half_window_size):
-                half_window_size = half_kernel_size * window_per_phn
+                half_kernel_size = (kernel_size - 1) // 2
+                half_window_size = window_per_phn * half_kernel_size
     """
     batch_size, seqlen, class_num = posteriors.shape
     padding = posteriors.new_zeros(batch_size, window_per_phn * half_kernel_size, class_num)
@@ -49,25 +50,37 @@ def posteriors_to_locations(posteriors, kernel_size, window_per_phn):
 
     Outputs:
         locations:
-            (batch_size, seqlen, kernel_size, window_size):
-                window_size = 2 * window_per_phn * half_kernel_size + 1
+            The outputs of posteriors_to_right_locations() on both left and right sides
+            [(batch_size, seqlen, half_kernel_size, half_window_size), ...] of length 2:
                 half_kernel_size = (kernel_size - 1) // 2
+                half_window_size = window_per_phn * half_kernel_size
     """
     batch_size, seqlen, class_num = posteriors.shape
-    half_kernel_size = (kernel_size-1) // 2
+    half_kernel_size = (kernel_size - 1) // 2
 
-    all_locations = posteriors.new_zeros(batch_size, seqlen, kernel_size, 2 * window_per_phn * half_kernel_size + 1)
-    center_index = (all_locations.size(-1) - 1) // 2
-    all_locations[:, :, half_kernel_size, center_index] = 1
+    left_locations, right_locations = None, None
     if half_kernel_size > 0:
-        all_locations[:, :, half_kernel_size+1:, center_index+1:] = posteriors_to_right_locations(
-            posteriors, half_kernel_size, window_per_phn
-        )
-        all_locations[:, :, :half_kernel_size, :center_index] = posteriors_to_right_locations(
+        left_locations = posteriors_to_right_locations(
             posteriors.flip(dims=[1]), half_kernel_size, window_per_phn
         ).flip(dims=[1, 2, 3])
+        right_locations = posteriors_to_right_locations(
+            posteriors, half_kernel_size, window_per_phn
+        )
 
-    return all_locations
+    return [left_locations, right_locations]
+
+
+def locations_to_full_locations(locations):
+    left_locations, right_locations = locations
+    batch_size, seqlen, half_kernel_size, half_window_size = left_locations.shape
+
+    full_locations = left_locations.new_zeros(batch_size, seqlen, 2 * half_kernel_size + 1, 2 * half_window_size + 1)
+    full_locations[:, :, half_kernel_size, half_window_size] = 1
+    if half_kernel_size > 0:
+        full_locations[:, :, :half_kernel_size, :half_window_size] = left_locations
+        full_locations[:, :, half_kernel_size+1:, half_window_size+1:] = right_locations
+
+    return full_locations
 
 
 def locations_to_neighborhood(features, locations):
@@ -76,27 +89,34 @@ def locations_to_neighborhood(features, locations):
         features:
             (batch_size, seqlen, feat_dim)
         locations:
-            (batch_size, seqlen, kernel_size, window_size):
-                kernel_size = width of a neighborhood
-                window_size = width of the frame-distribution for a specific neighbor
+            The output of posteriors_to_locations()
+            [(batch_size, seqlen, half_kernel_size, half_window_size), ...] of length 2:
+                half_kernel_size = (kernel_size - 1) // 2
+                half_window_size = window_per_phn * half_kernel_size
 
     Outputs:
         neighborhood:
             (batch_size, seqlen, kernel_size, feat_dim)
     """
+    left_locations, right_locations = locations
     batch_size, seqlen, feat_dim = features.shape
-    _, _, kernel_size, window_size = locations.shape
-    half_window_size = (window_size - 1) // 2
+    _, _, half_kernel_size, half_window_size = left_locations.shape
     
     padding = features.new_zeros(batch_size, half_window_size, feat_dim)
     padded_features = torch.cat([padding, features, padding], dim=1)
-
-    neighborhood = 0
-    for i in range(window_size):
-        neighborhood = neighborhood + (
-            locations[:, :, :, i].unsqueeze(-1) * 
-            padded_features[:, i : seqlen + i, :].unsqueeze(2)
+    
+    left_neighborhood = 0
+    right_neighborhood = 0
+    for i in range(half_window_size):
+        left_neighborhood = left_neighborhood + (
+            left_locations[:, :, :, i:i+1] * 
+            padded_features[:, i:seqlen+i, :].unsqueeze(2)
         )
+        right_neighborhood = right_neighborhood + (
+            right_locations[:, :, :, i:i+1] * 
+            padded_features[:, half_window_size+i+1:half_window_size+seqlen+i+1, :].unsqueeze(2)
+        )
+    neighborhood = torch.cat([left_neighborhood, features.unsqueeze(2), right_neighborhood], dim=2)
 
     return neighborhood
 
@@ -140,8 +160,9 @@ if __name__ == '__main__':
     padded_seqlen = padded_phones_onehot.size(1)
 
     select_instance = 0
+    full_locations = locations_to_full_locations(locations)
     for k in range(args.kernel_size):
-        location = locations[select_instance, args.idx, k, :].detach().cpu()
+        location = full_locations[select_instance, args.idx, k, :].detach().cpu()
         half_window = (location.size(-1) - 1) // 2
         abs_start = args.idx - half_window + padding_seqlen
         abs_end = args.idx + half_window + 1 + padding_seqlen
