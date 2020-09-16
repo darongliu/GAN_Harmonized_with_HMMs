@@ -24,7 +24,7 @@ class DisWrapper(nn.Module):
         else:
             self.model = WeakDiscriminator(phn_size=phn_size, local_discriminate=use_posterior_bnd, **model_config, max_len=max_len)
 
-    def calc_gp(self, real, real_len, fake, fake_len):
+    def calc_gp(self, real, real_len, fake, fake_len, prob=None):
         """
         Inputs:
             real, fake: torch.tensor, padded sequence
@@ -42,7 +42,9 @@ class DisWrapper(nn.Module):
         inter_len = torch.stack([real_len, fake_len]).min(0)[0]
         if self.model_type == 'lstm':
             inter, inter_len = self._sort_sequences(inter, inter_len)
-        inter_pred = self.model(inter, inter_len)
+
+        # TBD: which posteriors to use here, prob or inter?
+        inter_pred = self.model(inter, inter_len, posteriors=prob)
 
         gradients = torch.autograd.grad(outputs=inter_pred, inputs=inter,
                 grad_outputs=torch.ones(inter_pred.size()).to(device),
@@ -50,6 +52,13 @@ class DisWrapper(nn.Module):
 
         gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
         return gradient_penalty
+
+    def calc_phone_posterior_gp(self, real, real_len, fake, fake_len, prob):
+        frames_per_phone = max(round(fake_len.max().item() / real_len.max().item()), 1)
+        expanded_real = real.unsqueeze(2).expand(-1, -1, frames_per_phone, -1).reshape(real.size(0), -1, real.size(-1))
+        estimated_phone_len = real_len * frames_per_phone
+        min_len = torch.min(estimated_phone_len.long(), fake_len.long())
+        return self.calc_gp(expanded_real[:, :min_len.max()], min_len, fake[:, :min_len.max()], min_len, prob[:, :min_len.max()])
 
     def calc_g_loss(self, real, real_len, fake, fake_len, prob=None):
         """
@@ -98,7 +107,7 @@ class DisWrapper(nn.Module):
             gp_loss = self.calc_gp(real, real_len, fake, fake_len)
         else:
             fake_pred = self.model(fake, fake_len, prob)
-            gp_loss = torch.zeros(1).to(fake_pred.device)
+            gp_loss = self.calc_phone_posterior_gp(real, real_len, fake, fake_len, prob)
 
         d_loss = fake_pred.mean() - real_pred.mean()
         return d_loss, gp_loss

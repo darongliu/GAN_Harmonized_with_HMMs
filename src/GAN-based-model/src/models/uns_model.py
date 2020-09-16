@@ -91,13 +91,16 @@ class UnsModel(nn.Module):
                                                 fake_sample, sample_len,
                                                 prob if self.use_posterior_bnd else None)
             
-            seg_loss = torch.zeros(1).to(device)
             if not self.use_posterior_bnd:
                 batch_size = fake_sample.size(0) // 2
                 intra_diff_num = intra_diff_num.to(device)
                 seg_loss = self.gen_model.calc_intra_loss(intra_sample[:batch_size],
                                                           intra_sample[batch_size:],
                                                           intra_diff_num)
+            else:
+                estimated_phone_num = (1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)).sum(dim=-1) + 1
+                estimated_frame_phone_ratio = torch.true_divide(sample_len.to(device), estimated_phone_num).mean(dim=0, keepdim=True)
+                seg_loss = F.l1_loss(estimated_frame_phone_ratio, torch.ones(1).to(device) * self.config.frame_phone_ratio)
             
             return g_loss + self.config.seg_loss_ratio*seg_loss, seg_loss, fake_sample
         
