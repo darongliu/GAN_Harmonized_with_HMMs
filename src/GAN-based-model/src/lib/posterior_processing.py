@@ -70,7 +70,7 @@ def posteriors_to_locations(posteriors, kernel_size, window_per_phn):
     return [left_locations, right_locations]
 
 
-def locations_to_neighborhood(features, locations, out_kernel_size=None):
+def locations_to_neighborhood(features, locations, out_kernel_size=None, padding='zeros'):
     """
     Arguments:
         features:
@@ -91,8 +91,15 @@ def locations_to_neighborhood(features, locations, out_kernel_size=None):
     batch_size, seqlen, feat_dim = features.shape
     _, _, half_kernel_size, half_window_size = left_locations.shape
     
-    padding = features.new_zeros(batch_size, half_window_size, feat_dim)
-    padded_features = torch.cat([padding, features, padding], dim=1)
+    if padding == 'zeros':
+        padding = features.new_zeros(batch_size, half_window_size, feat_dim)
+        padded_features = torch.cat([padding, features, padding], dim=1)
+    elif padding == 'replicate':
+        left_padding = features[:, 0:1, :].expand(batch_size, half_window_size, feat_dim)
+        right_padding = features[:, -1:, :].expand(batch_size, half_window_size, feat_dim)
+        padded_features = torch.cat([left_padding, features, right_padding], dim=1)
+    else:
+        raise NotImplementedError
     
     left_neighborhood = 0
     right_neighborhood = 0

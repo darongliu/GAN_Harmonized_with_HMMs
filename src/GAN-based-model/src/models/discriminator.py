@@ -98,7 +98,7 @@ class WeakDiscriminator(nn.Module):
         dim: channels
     """
     def __init__(self, phn_size, dis_emb_dim, hidden_dim1, hidden_dim2, use_second_conv=True, max_len=None,
-                 max_conv_bank_kernel=9, window_per_phn=3, local_discriminate=False, **kwargs):
+                 max_conv_bank_kernel=9, window_per_phn=3, local_discriminate=False, eps=1e-8, **kwargs):
         # max_conv_kernel: means conv bank kernel is 3,5,...max_conv_kernel
         super().__init__()
         self.max_len = max_len
@@ -107,6 +107,7 @@ class WeakDiscriminator(nn.Module):
         self.max_conv_bank_kernel = max_conv_bank_kernel
         self.window_per_phn = window_per_phn
         self.local_discriminate = local_discriminate
+        self.eps = eps
 
         assert(max_conv_bank_kernel % 2 == 1)
         self.conv_1 = nn.ModuleList([Conv1dWrapper(dis_emb_dim, hidden_dim1, k) for k in range(FIRST_CONV_MIN_KERNEL, max_conv_bank_kernel + 1, 2)])
@@ -148,7 +149,7 @@ class WeakDiscriminator(nn.Module):
         outputs = outputs * mask
         return outputs.sum(1) / mask.sum(1)
     
-    def forward(self, inputs, inputs_len=None, posteriors=None):
+    def forward(self, inputs, inputs_len=None, posteriors=None, balance_ratio=None):
         outputs = self.embedding(inputs)
 
         if posteriors is not None:
@@ -184,6 +185,14 @@ class WeakDiscriminator(nn.Module):
 
             length_masks = torch.lt(torch.arange(inputs_len.max().item()).unsqueeze(0), inputs_len.unsqueeze(1)).to(inputs.device)
             scores = scores * length_masks
+
+            if posteriors is not None and balance_ratio is not None:
+                # reweight scores according to repeated frame num
+                abs_positions = torch.arange(scores.size(1)).to(scores.device).unsqueeze(0).expand_as(scores).unsqueeze(-1)
+                kernel3_positions = locations_to_neighborhood(abs_positions.float(), locations, 3, 'replicate').squeeze(-1)
+                left_position, _, right_position = kernel3_positions.chunk(3, dim=-1)
+                phone_interval = torch.max(right_position - left_position, scores.new_ones(1)).squeeze(-1)
+                scores = scores / (1 + (phone_interval - 1) * balance_ratio)
 
             outputs = scores.sum(dim=-1) / inputs_len.to(inputs.device)
         return outputs

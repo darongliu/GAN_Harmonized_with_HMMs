@@ -58,13 +58,28 @@ class UnsModel(nn.Module):
             self.dis_optim = torch.optim.Adam(self.dis_model.parameters(),
                                               lr=config.dis_lr, betas=(0.5, 0.9))
 
+        def get_raising_scheduler(total_steps, start_raise_ratio, end_raise_ratio):
+            start_point = round(total_steps * start_raise_ratio)
+            end_point = round(total_steps * end_raise_ratio)
+            raising_ratio = torch.arange(end_point - start_point).true_divide(end_point - start_point)
+            fixed_zero = torch.zeros(start_point)
+            fixed_full = torch.ones(total_steps - end_point)
+            scheduling = torch.cat([fixed_zero, raising_ratio, fixed_full], dim=0).to(device)
+            assert scheduling.size(0) == total_steps
+            return scheduling
+
+        self.frame_balance_schedular = None
+        if hasattr(self.config, 'frame_balance_scheduler'):
+            frame_balance_ratio_scheduler = get_raising_scheduler(self.config.step, *self.config.frame_balance_scheduler)
+            self.frame_balance_schedular = frame_balance_ratio_scheduler * self.config.frame_balance_ratio
+
         sys.stdout.write('\b'*len(cout_word))
         cout_word = 'UNSUPERVISED MODEL: finish     '
         sys.stdout.write(cout_word+'\n')
         sys.stdout.flush()
 
     def forward(self, sample_feat, sample_len, target_idx, target_len, frame_temp,
-                intra_diff_num=None, train_generator=True):
+                intra_diff_num, step, train_generator=True):
         sample_feat = sample_feat.to(device)
 
         prob, soft_prob, hard_prob = self.gen_model(sample_feat, frame_temp, sample_len)
@@ -89,7 +104,8 @@ class UnsModel(nn.Module):
         if train_generator:
             g_loss = self.dis_model.calc_g_loss(real_sample, target_len,
                                                 fake_sample, sample_len,
-                                                prob if self.use_posterior_bnd else None)
+                                                prob if self.use_posterior_bnd else None,
+                                                self.frame_balance_schedular[step])
             
             if not self.use_posterior_bnd:
                 batch_size = fake_sample.size(0) // 2
@@ -107,7 +123,8 @@ class UnsModel(nn.Module):
         else:
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
                                                          fake_sample, sample_len,
-                                                         prob if self.use_posterior_bnd else None)
+                                                         prob if self.use_posterior_bnd else None,
+                                                         self.frame_balance_schedular[step])
             
             return d_loss + self.config.penalty_ratio*gp_loss, gp_loss
 
@@ -147,7 +164,7 @@ class UnsModel(nn.Module):
                 dis_loss, gp_loss = self.forward(sample_feat, sample_len,
                                                  target_idx, target_len,
                                                  frame_temp, intra_diff_num,
-                                                 train_generator=False)
+                                                 step, train_generator=False)
                 dis_loss.backward()
                 d_clip_grad = nn.utils.clip_grad_norm_(self.dis_model.parameters(), 5.0)
                 self.dis_optim.step()
@@ -170,7 +187,7 @@ class UnsModel(nn.Module):
                 gen_loss, seg_loss, fake_sample = self.forward(sample_feat, sample_len,
                                                                target_idx, target_len,
                                                                frame_temp, intra_diff_num,
-                                                               train_generator=True)
+                                                               step, train_generator=True)
                 gen_loss.backward()
                 g_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
                 self.gen_optim.step()
