@@ -39,12 +39,13 @@ class DisWrapper(nn.Module):
         alpha = torch.rand(size).to(device)
 
         inter = real + alpha * (fake - real)
+        inter_prob = real + alpha * (prob - real)
         inter_len = torch.stack([real_len, fake_len]).min(0)[0]
         if self.model_type == 'lstm':
             inter, inter_len = self._sort_sequences(inter, inter_len)
 
         # TBD: which posteriors to use here, prob or inter?
-        inter_pred = self.model(inter, inter_len, prob, balance_ratio)
+        inter_pred = self.model(inter, inter_len, inter_prob, balance_ratio)
 
         gradients = torch.autograd.grad(outputs=inter_pred, inputs=inter,
                 grad_outputs=torch.ones(inter_pred.size()).to(device),
