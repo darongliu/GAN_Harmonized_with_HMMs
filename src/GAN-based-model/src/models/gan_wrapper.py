@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.models.discriminator import WeakDiscriminator, Discriminator
+from src.models.discriminator import WeakDiscriminator, Discriminator, LocalDiscriminator
 from src.models.lstm_discriminator import LSTMDiscriminator
 from src.models.transformer_discriminator import TransformerDiscriminator
 from src.models.generator import Frame2Phn
@@ -21,8 +21,12 @@ class DisWrapper(nn.Module):
             self.model = LSTMDiscriminator(phn_size=phn_size, **model_config, max_len=max_len)
         elif model_type == 'transformer':
             self.model = TransformerDiscriminator(phn_size=phn_size, **model_config, max_len=max_len)
-        else:
+        elif model_type == 'weak_cnn':
             self.model = WeakDiscriminator(phn_size=phn_size, local_discriminate=use_posterior_bnd, **model_config, max_len=max_len)
+        elif model_type == 'local_cnn':
+            self.model = LocalDiscriminator(phn_size=phn_size, local_discriminate=use_posterior_bnd, **model_config, max_len=max_len)
+        else:
+            raise NotImplementedError
 
     def calc_gp(self, real, real_len, fake, fake_len, prob=None, balance_ratio=None):
         """
@@ -39,15 +43,17 @@ class DisWrapper(nn.Module):
         alpha = torch.rand(size).to(device)
 
         inter = real + alpha * (fake - real)
-        inter_prob = real + alpha * (prob - real)
+        if prob is not None:
+            inter_prob = real + alpha * (prob - real)
+
         inter_len = torch.stack([real_len, fake_len]).min(0)[0]
         if self.model_type == 'lstm':
             inter, inter_len = self._sort_sequences(inter, inter_len)
 
-        # TBD: which posteriors to use here, prob or inter?
         inter_pred = self.model(inter, inter_len, inter_prob, balance_ratio)
 
-        gradients = torch.autograd.grad(outputs=inter_pred, inputs=inter,
+        grad_target = inter if prob is None else inter_prob
+        gradients = torch.autograd.grad(outputs=inter_pred, inputs=grad_target,
                 grad_outputs=torch.ones(inter_pred.size()).to(device),
                 create_graph=True, retain_graph=True, only_inputs=True)[0]
 

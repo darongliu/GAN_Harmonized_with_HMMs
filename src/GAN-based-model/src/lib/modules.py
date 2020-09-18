@@ -153,11 +153,12 @@ class ResBlock(nn.Module):
 
 
 class Conv1dWrapper(nn.Module):
-    def __init__(self, in_channel, out_channel, kernel_size):
+    def __init__(self, in_channel, out_channel, kernel_size, slicing=True):
         super().__init__()
         self.weight = nn.Parameter(torch.randn(out_channel, in_channel, kernel_size))
         self.bias = nn.Parameter(torch.randn(out_channel))
         self.kernel_size = kernel_size
+        self.slicing = slicing
 
     def forward(self, features):
         """
@@ -177,18 +178,24 @@ class Conv1dWrapper(nn.Module):
         padding = half_kernel
         if features.dim() == 4:
             assert self.kernel_size <= features.size(2)
-            center = (features.size(2) - 1) // 2
-            start = center - half_kernel
-            feats = feats.reshape(-1, *feats.shape[-2:])
-            feats = feats[:, start : start + self.kernel_size, :]
             padding = 0
+            feats = feats.reshape(-1, *feats.shape[-2:])
+            if self.slicing:
+                center = (features.size(2) - 1) // 2
+                start = center - half_kernel
+                feats = feats[:, start : start + self.kernel_size, :]
         
         local_feats = F.conv1d(feats.transpose(1, 2), self.weight, self.bias, padding=padding).transpose(1, 2)
 
         if features.dim() == 4:
-            # local_feats: (batch_size * seqlen, 1, out_channel)
-            local_feats = local_feats.reshape(features.size(0), -1, local_feats.size(-1))
-        # local_feats: (batch_size, seqlen, out_channel)
+            if self.slicing:
+                # local_feats: (batch_size * seqlen, 1, out_channel)
+                local_feats = local_feats.reshape(features.size(0), -1, local_feats.size(-1))
+            else:
+                # local_feats: (batch_size * seqlen, sliding_window_num, out_channel)
+                local_feats = local_feats.reshape(*features.shape[:2], -1, local_feats.size(-1))
+
+        # local_feats: (batch_size, seqlen, out_channel), (batch_size, seqlen, sliding_window_num, out_channel)
         assert local_feats.size(1) == features.size(1)
 
         return local_feats

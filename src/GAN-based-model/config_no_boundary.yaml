@@ -48,6 +48,14 @@ weak_cnn:
   hidden_dim2: 256
   use_second_conv: True
   window_per_phn: 3
+local_cnn:
+  dis_emb_dim: 256
+  hidden_dim1: 256
+  hidden_dim2: 256
+  use_second_conv: True
+  window_per_phn: 3
+  gb_tau: 0.5
+  gb_hard: True
 
 # Data loader
 phn_max_length: 75
