@@ -217,7 +217,8 @@ class LocalDiscriminator(nn.Module):
         self.eps = eps
 
         assert(max_conv_bank_kernel % 2 == 1)
-        self.conv_1 = nn.ModuleList([Conv1dWrapper(dis_emb_dim, hidden_dim1, k, slicing=True) for k in range(FIRST_CONV_MIN_KERNEL, max_conv_bank_kernel + 1, 2)])
+        self.conv_1 = nn.ModuleList([Conv1dWrapper(dis_emb_dim, hidden_dim1, k, SECOND_CONV_KERNEL if use_second_conv else 1) 
+                                    for k in range(FIRST_CONV_MIN_KERNEL, max_conv_bank_kernel + 1, 2)])
         self.lrelu_1 = nn.LeakyReLU()
         if use_second_conv:
             self.conv_2 = nn.ModuleList([Conv1dWrapper(len(self.conv_1) * hidden_dim1, hidden_dim2, SECOND_CONV_KERNEL) for i in range(SECOND_CONV_NUM)])

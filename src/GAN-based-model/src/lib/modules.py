@@ -153,12 +153,15 @@ class ResBlock(nn.Module):
 
 
 class Conv1dWrapper(nn.Module):
-    def __init__(self, in_channel, out_channel, kernel_size, slicing=True):
+    def __init__(self, in_channel, out_channel, kernel_size, out_pattern_size=1):
         super().__init__()
+        assert kernel_size % 2 == 1
+        assert out_pattern_size % 2 == 1
+
         self.weight = nn.Parameter(torch.randn(out_channel, in_channel, kernel_size))
         self.bias = nn.Parameter(torch.randn(out_channel))
         self.kernel_size = kernel_size
-        self.slicing = slicing
+        self.out_pattern_size = out_pattern_size
 
     def forward(self, features):
         """
@@ -172,30 +175,58 @@ class Conv1dWrapper(nn.Module):
                 (batch_size, seqlen, out_channel)
         """
         
-        half_kernel = (self.kernel_size - 1) // 2
+        half_kernel = self.kernel_size // 2
+        half_out_pattern = self.out_pattern_size // 2
         
         feats = features
-        padding = half_kernel
         if features.dim() == 4:
-            assert self.kernel_size <= features.size(2)
-            padding = 0
+            assert self.kernel_size + 2 * half_out_pattern <= features.size(2)
             feats = feats.reshape(-1, *feats.shape[-2:])
-            if self.slicing:
-                center = (features.size(2) - 1) // 2
-                start = center - half_kernel
-                feats = feats[:, start : start + self.kernel_size, :]
+            start = feats.size(1) // 2 - half_kernel - half_out_pattern
+            end = feats.size(1) // 2 + half_kernel + half_out_pattern + 1
+            feats = feats[:, start:end, :]
+            padding = 0
+        else:
+            padding = half_kernel
         
         local_feats = F.conv1d(feats.transpose(1, 2), self.weight, self.bias, padding=padding).transpose(1, 2)
 
         if features.dim() == 4:
-            if self.slicing:
-                # local_feats: (batch_size * seqlen, 1, out_channel)
-                local_feats = local_feats.reshape(features.size(0), -1, local_feats.size(-1))
-            else:
-                # local_feats: (batch_size * seqlen, sliding_window_num, out_channel)
-                local_feats = local_feats.reshape(*features.shape[:2], -1, local_feats.size(-1))
+            # local_feats: (batch_size * seqlen, sliding_window_num, out_channel)
+            local_feats = local_feats.reshape(*features.shape[:2], -1, local_feats.size(-1))
+            if self.out_pattern_size == 1:
+                local_feats = local_feats.squeeze(-2)
 
         # local_feats: (batch_size, seqlen, out_channel), (batch_size, seqlen, sliding_window_num, out_channel)
         assert local_feats.size(1) == features.size(1)
 
         return local_feats
+
+
+if __name__ == '__main__':
+    import os
+    import sys
+    import argparse
+    from time import time
+    import torch
+    from ipdb import set_trace
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--device', default='cuda')
+    parser.add_argument('--batch_size', type=int, default=50)
+    parser.add_argument('--in_seqlen', type=int, default=1000)
+    parser.add_argument('--in_channel', type=int, default=4)
+    parser.add_argument('--out_channel', type=int, default=9)
+    parser.add_argument('--in_kernel_size', type=int, default=12)
+    parser.add_argument('--kernel_size', type=int, default=5)
+    parser.add_argument('--out_pattern_size', type=int, default=1)
+    args = parser.parse_args()
+
+    conv = Conv1dWrapper(args.in_channel, args.out_channel, args.kernel_size, args.out_pattern_size).to(args.device)
+    inputs = torch.randn(args.batch_size, args.in_seqlen, args.in_kernel_size, args.in_channel).to(args.device)
+    outputs = conv(inputs)
+
+    if args.out_pattern_size > 1:
+        assert outputs.size(-2) == args.out_pattern_size
+    else:
+        assert outputs.dim() == 3
