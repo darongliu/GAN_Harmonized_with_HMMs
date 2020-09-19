@@ -167,7 +167,7 @@ class UnsModel(nn.Module):
                                                  frame_temp, intra_diff_num,
                                                  step, train_generator=False)
                 dis_total_loss = dis_loss
-                dis_total_loss = dis_total_loss + 0 if dis_gp_loss is None else self.config.penalty_ratio * dis_gp_loss
+                dis_total_loss = dis_total_loss + (0 if dis_gp_loss is None else self.config.penalty_ratio * dis_gp_loss)
                 dis_total_loss.backward()
 
                 dis_clip_grad = nn.utils.clip_grad_norm_(self.dis_model.parameters(), 5.0)
@@ -183,8 +183,8 @@ class UnsModel(nn.Module):
                                                              frame_temp, intra_diff_num,
                                                              step, train_generator=True)
                 gen_total_loss = gen_loss
-                gen_total_loss = gen_total_loss + 0 if gen_seg_loss is None else self.config.seg_loss_ratio * gen_seg_loss
-                gen_total_loss = gen_total_loss + 0 if gen_same_loss is None else self.config.same_loss_ratio * gen_same_loss
+                gen_total_loss = gen_total_loss + (0 if gen_seg_loss is None else self.config.seg_loss_ratio * gen_seg_loss)
+                gen_total_loss = gen_total_loss + (0 if gen_same_loss is None else self.config.same_loss_ratio * gen_same_loss)
                 gen_total_loss.backward()
 
                 gen_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
