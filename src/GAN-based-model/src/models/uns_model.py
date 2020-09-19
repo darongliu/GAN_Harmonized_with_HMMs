@@ -7,7 +7,7 @@ import sys
 import _pickle as pk
 import numpy as np
 from collections import defaultdict
-from tqdm import tqdm, trange
+from tqdm import trange
 from torch.utils.tensorboard import SummaryWriter
 
 from src.data.dataLoader import get_data_loader, get_dev_data_loader
@@ -151,8 +151,7 @@ class UnsModel(nn.Module):
         self.dis_model.train()
 
         logging = defaultdict(list)
-        t = trange(self.config.step)
-        for step in t:
+        for _ in trange(self.config.step, dynamic_ncols=True):
             self.step += 1
             #if self.step == 8000: fram_temp = 0.8
             #if self.step == 12000: fram_temp = 0.7
@@ -163,9 +162,9 @@ class UnsModel(nn.Module):
                 target_idx, target_len = next(train_target)
 
                 dis_loss, dis_gp_loss = self.forward(sample_feat, sample_len,
-                                                 target_idx, target_len,
-                                                 frame_temp, intra_diff_num,
-                                                 step, train_generator=False)
+                                                     target_idx, target_len,
+                                                     frame_temp, intra_diff_num,
+                                                     self.step, train_generator=False)
                 dis_total_loss = dis_loss
                 dis_total_loss = dis_total_loss + (0 if dis_gp_loss is None else self.config.penalty_ratio * dis_gp_loss)
                 dis_total_loss.backward()
@@ -181,7 +180,7 @@ class UnsModel(nn.Module):
                 gen_loss, gen_seg_loss, gen_same_loss = self.forward(sample_feat, sample_len,
                                                              target_idx, target_len,
                                                              frame_temp, intra_diff_num,
-                                                             step, train_generator=True)
+                                                             self.step, train_generator=True)
                 gen_total_loss = gen_loss
                 gen_total_loss = gen_total_loss + (0 if gen_seg_loss is None else self.config.seg_loss_ratio * gen_seg_loss)
                 gen_total_loss = gen_total_loss + (0 if gen_same_loss is None else self.config.same_loss_ratio * gen_same_loss)
