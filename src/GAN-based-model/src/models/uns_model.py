@@ -17,6 +17,7 @@ from src.lib.metrics import frame_eval, per_eval
 
 import torch_optimizer as optim # from https://github.com/jettify/pytorch-optimizer.git
 
+LOG_TEXT_NUM = 5
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -123,7 +124,7 @@ class UnsModel(nn.Module):
                 seg_loss = F.l1_loss(estimated_frame_phone_ratio, torch.ones(1).to(device) * self.config.frame_phone_ratio)
                 same_loss = (1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)).mean()
             
-            return g_loss, seg_loss, same_loss
+            return g_loss, seg_loss, same_loss, fake_sample
         
         else:
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
@@ -177,10 +178,10 @@ class UnsModel(nn.Module):
                 sample_feat, sample_len, intra_diff_num = next(train_source)
                 target_idx, target_len = next(train_target)
 
-                gen_loss, gen_seg_loss, gen_same_loss = self.forward(sample_feat, sample_len,
-                                                             target_idx, target_len,
-                                                             frame_temp, intra_diff_num,
-                                                             self.step, train_generator=True)
+                gen_loss, gen_seg_loss, gen_same_loss, fake_sample = self.forward(sample_feat, sample_len,
+                                                                                  target_idx, target_len,
+                                                                                  frame_temp, intra_diff_num,
+                                                                                  self.step, train_generator=True)
                 gen_total_loss = gen_loss
                 gen_total_loss = gen_total_loss + (0 if gen_seg_loss is None else self.config.seg_loss_ratio * gen_seg_loss)
                 gen_total_loss = gen_total_loss + (0 if gen_same_loss is None else self.config.same_loss_ratio * gen_same_loss)
@@ -195,9 +196,19 @@ class UnsModel(nn.Module):
                     logging[f'{name.split("_")[0]}/{name}'].append(vs[name].item() if type(vs[name]) is torch.Tensor else vs[name])
             
             if self.step % self.config.print_step == 0:
+                # log scalars
                 for name, values in logging.items():
                     self.log_writer.add_scalar(name, torch.FloatTensor(values).mean().item(), self.step)
                 logging = defaultdict(list)
+                
+                # log fake frame-sequences
+                all_boundaries = []
+                for idx, (fake, fake_len) in enumerate(zip(fake_sample.detach().cpu()[:LOG_TEXT_NUM], sample_len.detach().cpu()[:LOG_TEXT_NUM])):
+                    fake_seq = fake[:fake_len].argmax(dim=-1)
+                    all_boundaries.append(torch.nonzero((fake_seq[1:] != fake_seq[:-1]).long(), as_tuple=True)[0])
+                    self.log_writer.add_text(f'fake_sample_{idx}', ' '.join([train_data_set.idx2phn[idx] for idx in fake_seq.tolist()]), self.step)
+                fake_phone_num = torch.FloatTensor([len(bs) + 1 for bs in all_boundaries]).mean().item()
+                self.log_writer.add_scalar('gen/fake_real_phone_ratio', fake_phone_num / target_len.float().mean().item(), self.step)
 
             if self.step % self.config.eval_step == 0:
                 step_fer = self.dev(dev_data_set)
