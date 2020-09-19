@@ -189,9 +189,10 @@ class UnsModel(nn.Module):
                 gen_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
                 self.gen_optim.step()
 
-            for name, value in locals().items():
+            vs = locals()
+            for name in list(vs.keys()):
                 if 'loss' in name or 'grad' in name:
-                    logging[f'{name.split("_")[0]}/{name}'].append(value.item() if value is torch.Tensor else value)
+                    logging[f'{name.split("_")[0]}/{name}'].append(vs[name].item() if type(vs[name]) is torch.Tensor else vs[name])
             
             if self.step % self.config.print_step == 0:
                 for name, values in logging.items():
