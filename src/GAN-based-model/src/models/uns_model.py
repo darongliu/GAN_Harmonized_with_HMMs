@@ -6,6 +6,7 @@ import os
 import sys
 import _pickle as pk
 import numpy as np
+from collections import defaultdict
 from tqdm import tqdm, trange
 from torch.utils.tensorboard import SummaryWriter
 
@@ -106,6 +107,8 @@ class UnsModel(nn.Module):
                                                 fake_sample, sample_len,
                                                 prob if self.use_posterior_bnd else None,
                                                 self.frame_balance_schedular[step])
+            seg_loss = None
+            same_loss = None
             
             if not self.use_posterior_bnd:
                 batch_size = fake_sample.size(0) // 2
@@ -117,8 +120,9 @@ class UnsModel(nn.Module):
                 estimated_phone_num = (1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)).sum(dim=-1) + 1
                 estimated_frame_phone_ratio = torch.true_divide(sample_len.to(device), estimated_phone_num).mean(dim=0, keepdim=True)
                 seg_loss = F.l1_loss(estimated_frame_phone_ratio, torch.ones(1).to(device) * self.config.frame_phone_ratio)
+                same_loss = (1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)).mean()
             
-            return g_loss + self.config.seg_loss_ratio*seg_loss, seg_loss, fake_sample
+            return g_loss, seg_loss, same_loss
         
         else:
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
@@ -126,30 +130,26 @@ class UnsModel(nn.Module):
                                                          prob if self.use_posterior_bnd else None,
                                                          self.frame_balance_schedular[step])
             
-            return d_loss + self.config.penalty_ratio*gp_loss, gp_loss
+            return d_loss, gp_loss
 
 
     def train(self, train_data_set, dev_data_set=None, aug=False):
         print ('TRAINING(unsupervised)...')
         self.log_writer = SummaryWriter(self.config.save_path)
 
-        ######################################################################
-        # Build dataloader
-        #
         train_source, train_target = get_data_loader(train_data_set,
                                                      batch_size=self.config.batch_size,
                                                      repeat=self.config.repeat,
                                                      use_posterior_bnd=self.use_posterior_bnd)
         train_source, train_target = iter(train_source), iter(train_target)
 
-        gen_loss, dis_loss, seg_loss, gp_loss = 0, 0, 0, 0
-        step_gen_loss, step_dis_loss, step_seg_loss, step_gp_loss = 0, 0, 0, 0
         max_fer = 100.0
         frame_temp = self.config.frame_temp
 
         self.gen_model.train()
         self.dis_model.train()
 
+        logging = defaultdict(list)
         t = trange(self.config.step)
         for step in t:
             self.step += 1
@@ -161,73 +161,53 @@ class UnsModel(nn.Module):
                 sample_feat, sample_len, intra_diff_num = next(train_source)
                 target_idx, target_len = next(train_target)
 
-                dis_loss, gp_loss = self.forward(sample_feat, sample_len,
+                dis_loss, dis_gp_loss = self.forward(sample_feat, sample_len,
                                                  target_idx, target_len,
                                                  frame_temp, intra_diff_num,
                                                  step, train_generator=False)
-                dis_loss.backward()
-                d_clip_grad = nn.utils.clip_grad_norm_(self.dis_model.parameters(), 5.0)
+                dis_total_loss = dis_loss
+                dis_total_loss = dis_total_loss + 0 if dis_gp_loss is None else self.config.penalty_ratio * dis_gp_loss
+                dis_total_loss.backward()
+
+                dis_clip_grad = nn.utils.clip_grad_norm_(self.dis_model.parameters(), 5.0)
                 self.dis_optim.step()
-
-                dis_loss = dis_loss.item()
-                gp_loss = gp_loss.item()
-                t.set_postfix(dis_loss=f'{dis_loss:.2f}',
-                              gp_loss=f'{gp_loss:.2f}',
-                              gen_loss=f'{gen_loss:.2f}',
-                              seg_loss=f'{seg_loss:.5f}')
-
-            self.write_log('D_Loss', {"dis_loss": dis_loss,
-                                      "gp_loss": gp_loss})
 
             for _ in range(self.config.gen_iter):
                 self.gen_optim.zero_grad()
                 sample_feat, sample_len, intra_diff_num = next(train_source)
                 target_idx, target_len = next(train_target)
 
-                gen_loss, seg_loss, fake_sample = self.forward(sample_feat, sample_len,
-                                                               target_idx, target_len,
-                                                               frame_temp, intra_diff_num,
-                                                               step, train_generator=True)
-                gen_loss.backward()
-                g_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
+                gen_loss, gen_seg_loss, gen_same_loss = self.forward(sample_feat, sample_len,
+                                                             target_idx, target_len,
+                                                             frame_temp, intra_diff_num,
+                                                             step, train_generator=True)
+                gen_total_loss = gen_loss
+                gen_total_loss = gen_total_loss + 0 if gen_seg_loss is None else self.config.seg_loss_ratio * gen_seg_loss
+                gen_total_loss = gen_total_loss + 0 if gen_same_loss is None else self.config.same_loss_ratio * gen_same_loss
+                gen_total_loss.backward()
+
+                gen_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
                 self.gen_optim.step()
 
-                gen_loss = gen_loss.item()
-                seg_loss = seg_loss.item()
-                t.set_postfix(dis_loss=f'{dis_loss:.2f}',
-                              gp_loss=f'{gp_loss:.2f}',
-                              gen_loss=f'{gen_loss:.2f}',
-                              seg_loss=f'{seg_loss:.5f}')
-
-            self.write_log('G_Loss', {"gen_loss": gen_loss,
-                                      'seg_loss': seg_loss})
-
-            ######################################################################
-            # Update & print losses
-            #
-            step_gen_loss += gen_loss / self.config.print_step
-            step_dis_loss += dis_loss / self.config.print_step
-            step_seg_loss += seg_loss / self.config.print_step
-            step_gp_loss += gp_loss / self.config.print_step
-
+            for name, value in locals().items():
+                if 'loss' in name or 'grad' in name:
+                    logging[f'{name.split("_")[0]}/{name}'].append(value.item() if value is torch.Tensor else value)
+            
             if self.step % self.config.print_step == 0:
-                tqdm.write(f'Step: {self.step:5d} '+
-                           f'dis_loss: {step_dis_loss:.4f} '+
-                           f'gp_loss: {step_gp_loss:.4f} '+
-                           f'gen_loss: {step_gen_loss:.4f} '+
-                           f'seg_loss: {step_seg_loss:.4f}')
-                step_gen_loss, step_dis_loss, step_seg_loss, step_gp_loss = 0, 0, 0, 0
+                for name, values in logging.items():
+                    self.log_writer.add_scalar(name, torch.FloatTensor(values).mean().item(), self.step)
+                logging = defaultdict(list)
 
-            ######################################################################
-            # Evaluation
-            #
             if self.step % self.config.eval_step == 0:
                 step_fer = self.dev(dev_data_set)
-                tqdm.write(f'EVAL max: {max_fer:.2f} step: {step_fer:.2f}')
+                self.log_writer.add_scalar('fer', step_fer, self.step)
+                
                 if step_fer < max_fer: 
                     max_fer = step_fer
                     self.save_ckpt()
+                
                 self.gen_model.train()
+
         print ('='*80)
 
     def dev(self, dev_data_set):
