@@ -200,15 +200,6 @@ class UnsModel(nn.Module):
                 for name, values in logging.items():
                     self.log_writer.add_scalar(name, torch.FloatTensor(values).mean().item(), self.step)
                 logging = defaultdict(list)
-                
-                # log fake frame-sequences
-                all_boundaries = []
-                for idx, (fake, fake_len) in enumerate(zip(fake_sample.detach().cpu()[:LOG_TEXT_NUM], sample_len.detach().cpu()[:LOG_TEXT_NUM])):
-                    fake_seq = fake[:fake_len].argmax(dim=-1)
-                    all_boundaries.append(torch.nonzero((fake_seq[1:] != fake_seq[:-1]).long(), as_tuple=True)[0])
-                    self.log_writer.add_text(f'fake_sample_{idx}', ' '.join([train_data_set.idx2phn[idx] for idx in fake_seq.tolist()]), self.step)
-                fake_phone_num = torch.FloatTensor([len(bs) + 1 for bs in all_boundaries]).mean().item()
-                self.log_writer.add_scalar('gen/fake_real_phone_ratio', fake_phone_num / target_len.float().mean().item(), self.step)
 
             if self.step % self.config.eval_step == 0:
                 step_fer = self.dev(dev_data_set)
@@ -219,6 +210,15 @@ class UnsModel(nn.Module):
                     self.save_ckpt()
                 
                 self.gen_model.train()
+
+                # log fake frame-sequences
+                all_boundaries = []
+                for idx, (fake, fake_len) in enumerate(zip(fake_sample.detach().cpu()[:LOG_TEXT_NUM], sample_len.detach().cpu()[:LOG_TEXT_NUM])):
+                    fake_seq = fake[:fake_len].argmax(dim=-1)
+                    all_boundaries.append(torch.nonzero((fake_seq[1:] != fake_seq[:-1]).long(), as_tuple=True)[0])
+                    self.log_writer.add_text(f'fake_sample_{idx}', ' '.join([train_data_set.idx2phn[idx] for idx in fake_seq.tolist()]), self.step)
+                fake_phone_num = torch.FloatTensor([len(bs) + 1 for bs in all_boundaries]).mean().item()
+                self.log_writer.add_scalar('gen/fake_real_phone_ratio', fake_phone_num / target_len.float().mean().item(), self.step)
 
         print ('='*80)
 
