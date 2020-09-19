@@ -192,7 +192,7 @@ class UnsModel(nn.Module):
 
             vs = locals()
             for name in list(vs.keys()):
-                if 'loss' in name or 'grad' in name:
+                if ('loss' in name or 'grad' in name) and vs[name] is not None:
                     logging[f'{name.split("_")[0]}/{name}'].append(vs[name].item() if type(vs[name]) is torch.Tensor else vs[name])
             
             if self.step % self.config.print_step == 0:
