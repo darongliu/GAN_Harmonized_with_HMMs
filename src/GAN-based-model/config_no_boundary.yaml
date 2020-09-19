@@ -69,7 +69,7 @@ repeat: 6 # repeat every sample x times
 batch_size: 20
 epoch: 2000 # for supervised training
 step: 20000 # for unsupervised training
-print_step: 100
+print_step: 5
 eval_step: 200
 gen_iter: 1
 dis_iter: 3
