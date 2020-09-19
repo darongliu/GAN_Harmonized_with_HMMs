@@ -1,0 +1,84 @@
+#Source path
+train_feat_path: 'timit_for_GAN/audio/timit-train-mfcc-nor.pkl'
+train_orc_bnd_path: 'timit_for_GAN/audio/timit-train-orc1-bnd.pkl'
+train_phn_path: 'timit_for_GAN/audio/timit-train-phn.pkl'
+
+dev_feat_path: 'timit_for_GAN/audio/timit-test-mfcc-nor.pkl'
+dev_orc_bnd_path: 'timit_for_GAN/audio/timit-test-orc1-bnd.pkl'
+dev_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
+
+test_feat_path: 'timit_for_GAN/audio/timit-test-mfcc-nor.pkl'
+test_orc_bnd_path: 'timit_for_GAN/audio/timit-test-orc1-bnd.pkl'
+test_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
+
+# Model
+# generator
+gen_hidden_size: 512
+# others
+seg_loss_ratio: 50
+same_loss_ratio: 50
+frame_phone_ratio: 2
+frame_balance_ratio: 0.2
+frame_balance_scheduler: [0.5, 0.75]
+penalty_ratio: 1.0e-5
+frame_temp: 0.9
+
+# discriminator
+target_augment_prob: 'None' # 'None' # [0.04, 0.84, 0.11, 0.01]
+use_maxlen: True # True, False
+model_type: 'local_cnn' # cnn, weak_cnn, lstm, transformer
+cnn:
+  dis_emb_dim: 256
+  hidden_dim: 256
+  num_layers: 4
+  kernel: 3
+  use_batchnorm: True
+lstm:
+  dis_emb_dim: 256
+  hidden_dim: 256
+  num_layers: 2
+  bidirectional: True
+transformer:
+  dis_emb_dim: 256
+  num_head: 8
+  hidden_dim: 256
+  num_layers: 4
+weak_cnn:
+  dis_emb_dim: 256
+  hidden_dim1: 256
+  hidden_dim2: 256
+  use_second_conv: True
+  window_per_phn: 3
+local_cnn:
+  dis_emb_dim: 256
+  hidden_dim1: 256
+  hidden_dim2: 256
+  use_second_conv: True
+  window_per_phn: 3
+  gb_tau: 0.5
+  gb_hard: True
+
+# Data loader
+phn_max_length: 75
+feat_max_length: 777
+concat_window: 11
+sample_var: 0.15
+repeat: 6 # repeat every sample x times
+
+# Train
+batch_size: 20
+epoch: 2000 # for supervised training
+step: 20000 # for unsupervised training
+print_step: 5
+eval_step: 200
+gen_iter: 1
+dis_iter: 3
+gen_lr: 0.001
+dis_lr: 0.002
+sup_lr: 0.001
+optimizer: 'radam' # radam
+
+# gumbel
+gan_gumbel: 'soft' # no, soft, hard
+intra_gumbel: 'no'  # no, soft, hard
+output_gumbel: 'no'  # no, soft, hard
