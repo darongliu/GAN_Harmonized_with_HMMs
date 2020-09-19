@@ -43,6 +43,7 @@ class DisWrapper(nn.Module):
         alpha = torch.rand(size).to(device)
 
         inter = real + alpha * (fake - real)
+        inter_prob = None
         if prob is not None:
             inter_prob = real + alpha * (prob - real)
 

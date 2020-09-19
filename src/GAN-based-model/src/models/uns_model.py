@@ -101,12 +101,13 @@ class UnsModel(nn.Module):
 
         
         real_sample = gen_real_sample(target_idx, target_len, self.config.phn_size).to(device)
+        balance_ratio = None if self.frame_balance_schedular is None else self.frame_balance_schedular[step]
 
         if train_generator:
             g_loss = self.dis_model.calc_g_loss(real_sample, target_len,
                                                 fake_sample, sample_len,
                                                 prob if self.use_posterior_bnd else None,
-                                                self.frame_balance_schedular[step])
+                                                balance_ratio)
             seg_loss = None
             same_loss = None
             
@@ -128,7 +129,7 @@ class UnsModel(nn.Module):
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
                                                          fake_sample, sample_len,
                                                          prob if self.use_posterior_bnd else None,
-                                                         self.frame_balance_schedular[step])
+                                                         balance_ratio)
             
             return d_loss, gp_loss
 
