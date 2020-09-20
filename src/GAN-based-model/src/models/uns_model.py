@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 import os
 import sys
+import random
 import _pickle as pk
 import numpy as np
 from collections import defaultdict
@@ -17,7 +18,8 @@ from src.lib.metrics import frame_eval, per_eval
 
 import torch_optimizer as optim # from https://github.com/jettify/pytorch-optimizer.git
 
-LOG_TEXT_NUM = 5
+LOG_TEXT_NUM = 3
+MAX_SEQLEN = 1000
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -127,7 +129,7 @@ class UnsModel(nn.Module):
                 avg_prob = prob.view(-1, prob.size(-1)).mean(dim=0)
                 entropy_loss = ((avg_prob + 1e-8).log() * avg_prob).sum()
             
-            return g_loss, seg_loss, same_loss, entropy_loss, fake_sample
+            return g_loss, seg_loss, same_loss, entropy_loss, prob
         
         else:
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
@@ -155,6 +157,7 @@ class UnsModel(nn.Module):
         self.dis_model.train()
 
         logging = defaultdict(list)
+        length_mask = torch.arange(MAX_SEQLEN).to(device)
         for _ in trange(self.config.step, dynamic_ncols=True):
             self.step += 1
             #if self.step == 8000: fram_temp = 0.8
@@ -183,7 +186,7 @@ class UnsModel(nn.Module):
                 sample_feat, sample_len, intra_diff_num = next(train_source)
                 target_idx, target_len = next(train_target)
 
-                gen_loss, gen_seg_loss, gen_same_loss, gen_entropy_loss, fake_sample = self.forward(
+                gen_loss, gen_seg_loss, gen_same_loss, gen_entropy_loss, fake_probs = self.forward(
                     sample_feat, sample_len,
                     target_idx, target_len,
                     frame_temp, intra_diff_num,
@@ -209,6 +212,12 @@ class UnsModel(nn.Module):
                     self.log_writer.add_scalar(name, torch.FloatTensor(values).mean().item(), self.step)
                 logging = defaultdict(list)
 
+                # log fake frame-sequences
+                fake_pred = fake_probs.detach().argmax(dim=-1)
+                length_masks = torch.lt(length_mask[:max(sample_len)].unsqueeze(0), sample_len.to(device).unsqueeze(-1))
+                fake_phone_num = ((fake_pred[:, :-1] != fake_pred[:, 1:]) * length_masks[:, :-1]).sum(dim=-1).float().mean().item() + 1
+                self.log_writer.add_scalar('gen/fake_real_phone_ratio', fake_phone_num / target_len.float().mean().item(), self.step)
+
             if self.step % self.config.eval_step == 0:
                 step_fer = self.dev(dev_data_set)
                 self.log_writer.add_scalar('fer', step_fer, self.step)
@@ -219,33 +228,34 @@ class UnsModel(nn.Module):
                 
                 self.gen_model.train()
 
-                # log fake frame-sequences
-                all_boundaries = []
-                for idx, (fake, fake_len) in enumerate(zip(fake_sample.detach().cpu()[:LOG_TEXT_NUM], sample_len.detach().cpu()[:LOG_TEXT_NUM])):
-                    fake_seq = fake[:fake_len].argmax(dim=-1)
-                    all_boundaries.append(torch.nonzero((fake_seq[1:] != fake_seq[:-1]).long(), as_tuple=True)[0])
-                    self.log_writer.add_text(f'fake_sample_{idx}', ' '.join([train_data_set.idx2phn[idx] for idx in fake_seq.tolist()]), self.step)
-                fake_phone_num = torch.FloatTensor([len(bs) + 1 for bs in all_boundaries]).mean().item()
-                self.log_writer.add_scalar('gen/fake_real_phone_ratio', fake_phone_num / target_len.float().mean().item(), self.step)
-
         print ('='*80)
 
     def dev(self, dev_data_set):
         dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
         self.gen_model.eval()
         fers, fnums = 0, 0
-        for feat, frame_label, length in dev_source:
-            prob, soft_prob, hard_prob  = self.gen_model(feat.to(device), mask_len=length)
+        log_indices = random.sample(range(len(dev_source)), LOG_TEXT_NUM)
+        for batch_idx, (feat, frame_label, length) in enumerate(dev_source):
+            prob, soft_prob, hard_prob = self.gen_model(feat.to(device), mask_len=length)
             if self.config.output_gumbel == 'soft':
                 prob = soft_prob
             elif self.config.output_gumbel == 'hard':
                 prob = hard_prob
-            prob = prob.detach().cpu().numpy()
+            prob = prob.detach().cpu()
             pred = prob.argmax(-1)
-            frame_label = frame_label.numpy()
-            frame_error, frame_num, _ = frame_eval(pred, frame_label, length)
+            frame_error, frame_num, _ = frame_eval(pred.numpy(), frame_label.numpy(), length)
             fers += frame_error
             fnums += frame_num
+
+            if batch_idx in log_indices:
+                real, fake = frame_label[0], pred[0]
+                l = (real == -100).nonzero(as_tuple=False).view(-1)[0]
+                text = (
+                    '**REAL**  \n' + ' '.join([dev_data_set.idx2phn[idx] for idx in real[:l].tolist()]) + '  \n' +
+                    '**FAKE**  \n' + ' '.join([dev_data_set.idx2phn[idx] for idx in fake[:l].tolist()])
+                )
+                self.log_writer.add_text(f'sample_{batch_idx}', text, self.step)
+
         step_fer = fers / fnums * 100
         return step_fer
 
