@@ -111,6 +111,7 @@ class UnsModel(nn.Module):
                                                 balance_ratio)
             seg_loss = None
             same_loss = None
+            entropy_loss = None
             
             if not self.use_posterior_bnd:
                 batch_size = fake_sample.size(0) // 2
@@ -123,8 +124,10 @@ class UnsModel(nn.Module):
                 estimated_frame_phone_ratio = torch.true_divide(sample_len.to(device), estimated_phone_num).mean(dim=0, keepdim=True)
                 seg_loss = F.l1_loss(estimated_frame_phone_ratio, torch.ones(1).to(device) * self.config.frame_phone_ratio)
                 same_loss = (1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)).mean()
+                avg_prob = prob.view(-1, prob.size(-1)).mean(dim=0)
+                entropy_loss = ((avg_prob + 1e-8).log() * avg_prob).sum()
             
-            return g_loss, seg_loss, same_loss, fake_sample
+            return g_loss, seg_loss, same_loss, entropy_loss, fake_sample
         
         else:
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
@@ -162,10 +165,12 @@ class UnsModel(nn.Module):
                 sample_feat, sample_len, intra_diff_num = next(train_source)
                 target_idx, target_len = next(train_target)
 
-                dis_loss, dis_gp_loss = self.forward(sample_feat, sample_len,
-                                                     target_idx, target_len,
-                                                     frame_temp, intra_diff_num,
-                                                     self.step, train_generator=False)
+                dis_loss, dis_gp_loss = self.forward(
+                    sample_feat, sample_len,
+                    target_idx, target_len,
+                    frame_temp, intra_diff_num,
+                    self.step, train_generator=False
+                )
                 dis_total_loss = dis_loss
                 dis_total_loss = dis_total_loss + (0 if dis_gp_loss is None else self.config.penalty_ratio * dis_gp_loss)
                 dis_total_loss.backward()
@@ -178,13 +183,16 @@ class UnsModel(nn.Module):
                 sample_feat, sample_len, intra_diff_num = next(train_source)
                 target_idx, target_len = next(train_target)
 
-                gen_loss, gen_seg_loss, gen_same_loss, fake_sample = self.forward(sample_feat, sample_len,
-                                                                                  target_idx, target_len,
-                                                                                  frame_temp, intra_diff_num,
-                                                                                  self.step, train_generator=True)
+                gen_loss, gen_seg_loss, gen_same_loss, gen_entropy_loss, fake_sample = self.forward(
+                    sample_feat, sample_len,
+                    target_idx, target_len,
+                    frame_temp, intra_diff_num,
+                    self.step, train_generator=True
+                )
                 gen_total_loss = gen_loss
                 gen_total_loss = gen_total_loss + (0 if gen_seg_loss is None else self.config.seg_loss_ratio * gen_seg_loss)
                 gen_total_loss = gen_total_loss + (0 if gen_same_loss is None else self.config.same_loss_ratio * gen_same_loss)
+                gen_total_loss = gen_total_loss + (0 if gen_entropy_loss is None else self.config.entropy_loss_ratio * gen_entropy_loss)
                 gen_total_loss.backward()
 
                 gen_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
