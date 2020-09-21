@@ -245,16 +245,17 @@ class LocalDiscriminator(nn.Module):
         return x @ self.emb_bag.weight
 
     def calc_gp(self, real, real_len, fake, fake_len, prob, balance_ratio):
+        device = real.device
         subseqlen = self.max_conv_bank_kernel + 2 if self.use_second_conv else 0
         real_unfolded = F.unfold(real.transpose(1, 2).unsqueeze(-1), (subseqlen, 1), padding=(subseqlen // 2, 0)).transpose(1, 2)
         real_unfolded = real_unfolded.reshape(*real_unfolded.shape[:2], subseqlen, real.size(-1))
         locations = posteriors_to_locations(prob, subseqlen, self.window_per_phn)
         prob_unfolded = locations_to_neighborhood(prob, locations)
         
-        real_length_mask = torch.lt(torch.arange(real.size(1)).unsqueeze(0), real_len.unsqueeze(-1))
+        real_length_mask = torch.lt(torch.arange(real.size(1)).unsqueeze(0).to(device), real_len.unsqueeze(-1))
         real_valid_patterns = real_unfolded[real_length_mask.nonzero(as_tuple=True)]
         
-        prob_length_mask = torch.lt(torch.arange(prob.size(1)).unsqueeze(0), fake_len.unsqueeze(-1))
+        prob_length_mask = torch.lt(torch.arange(prob.size(1)).unsqueeze(0).to(device), fake_len.unsqueeze(-1))
         prob_valid_indices = prob_length_mask.nonzero(as_tuple=True)
         prob_valid_patterns = prob_unfolded[prob_valid_indices]
         locations = locations[prob_valid_indices]
@@ -267,9 +268,9 @@ class LocalDiscriminator(nn.Module):
         assert fake_valid_patterns.shape == real_valid_patterns.shape
         assert fake_valid_patterns.size(0) == locations.size(0)
 
-        alpha = torch.rand(real_valid_patterns.size(0)).to(real.device).unsqueeze(-1).unsqueeze(-1)
+        alpha = torch.rand(real_valid_patterns.size(0)).to(device).unsqueeze(-1).unsqueeze(-1)
         inter_patterns = real_valid_patterns + (fake_valid_patterns - real_valid_patterns) * alpha
-        inter_len = torch.ones(len(inter_patterns)).long().to(real.device)
+        inter_len = torch.ones(len(inter_patterns)).long().to(device)
         inter_pred, _ = self.forward(inter_patterns.unsqueeze(1), inter_len.unsqueeze(1), None, balance_ratio, locations.unsqueeze(1))
 
         gp_grad_target = eval(f'{self.gp_grad_target}_valid_patterns')

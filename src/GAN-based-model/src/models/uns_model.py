@@ -85,8 +85,12 @@ class UnsModel(nn.Module):
     def forward(self, sample_feat, sample_len, target_idx, target_len, frame_temp,
                 intra_diff_num, step, train_generator=True):
         sample_feat = sample_feat.to(device)
+        sample_len = sample_len.to(device)
+        target_idx = target_idx.to(device)
+        target_len = target_len.to(device)
 
         prob, soft_prob, hard_prob = self.gen_model(sample_feat, frame_temp, sample_len)
+        sample_len_masks = torch.lt(torch.arange(sample_len.max()).to(device).unsqueeze(0), sample_len.unsqueeze(-1))
 
         if self.config.gan_gumbel == 'soft':
             fake_sample = soft_prob
@@ -124,14 +128,20 @@ class UnsModel(nn.Module):
                                                           intra_sample[batch_size:],
                                                           intra_diff_num)
             else:
-                estimated_phone_num = (1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)).sum(dim=-1) + 1
-                estimated_frame_phone_ratio = torch.true_divide(sample_len.to(device), estimated_phone_num).mean(dim=0, keepdim=True)
+                estimated_phone_num = ((1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)) * sample_len_masks[:, :-1]).sum(dim=-1) + 1
+                estimated_frame_phone_ratio = torch.true_divide(sample_len, estimated_phone_num).mean(dim=0, keepdim=True)
                 seg_loss = F.l1_loss(estimated_frame_phone_ratio, torch.ones(1).to(device) * self.config.frame_phone_ratio)
-                same_loss = (1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)).mean()
-                avg_prob = prob.view(-1, prob.size(-1)).mean(dim=0)
-                entropy_loss = ((avg_prob + 1e-8).log() * avg_prob).sum()
-                avg_entropy_loss = -((prob + 1e-8).log() * prob).sum(dim=-1).mean()
-                location_entropy_loss = -((locations + 1e-8).log() * locations).sum(dim=-1).mean()
+                same_loss = ((1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)) * sample_len_masks[:, :-1]).sum(dim=-1).true_divide(sample_len).mean()
+                
+                valid_indices = sample_len_masks.nonzero(as_tuple=True)
+                valid_prob = prob[valid_indices].view(-1, prob.size(-1))
+                avg_prob = valid_prob.mean(dim=0)
+                entropy_loss = -((avg_prob + 1e-8).log() * avg_prob).sum()
+                avg_entropy_loss = -((valid_prob + 1e-8).log() * valid_prob).sum(dim=-1).mean()
+                
+                valid_locations = locations[valid_indices].view(-1, locations.size(-1))
+                normalized_locations = valid_locations / (valid_locations.sum(dim=-1, keepdim=True) + 1e-8)
+                location_entropy_loss = -((normalized_locations + 1e-8).log() * normalized_locations).sum(dim=-1).mean()
             
             return g_loss, seg_loss, same_loss, entropy_loss, avg_entropy_loss, location_entropy_loss, prob
         
@@ -199,7 +209,7 @@ class UnsModel(nn.Module):
                 gen_total_loss = gen_loss
                 gen_total_loss = gen_total_loss + (0 if gen_seg_loss is None else self.config.seg_loss_ratio * gen_seg_loss)
                 gen_total_loss = gen_total_loss + (0 if gen_same_loss is None else self.config.same_loss_ratio * gen_same_loss)
-                gen_total_loss = gen_total_loss + (0 if gen_entropy_loss is None else self.config.entropy_loss_ratio * gen_entropy_loss)
+                gen_total_loss = gen_total_loss - (0 if gen_entropy_loss is None else self.config.entropy_loss_ratio * gen_entropy_loss)
                 gen_total_loss.backward()
 
                 gen_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
