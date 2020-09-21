@@ -151,6 +151,7 @@ class WeakDiscriminator(nn.Module):
         return outputs.sum(1) / mask.sum(1)
     
     def forward(self, inputs, inputs_len=None, posteriors=None, balance_ratio=None, locations=None):
+        device = inputs.device
         outputs = self.embedding(inputs)
 
         if posteriors is not None:
@@ -184,18 +185,18 @@ class WeakDiscriminator(nn.Module):
             scores = self.linear(outputs).squeeze(-1)
             # scores: (batch_size, seqlen)
 
-            length_masks = torch.lt(torch.arange(inputs_len.max().item()).unsqueeze(0), inputs_len.unsqueeze(1)).to(inputs.device)
+            length_masks = torch.lt(torch.arange(inputs_len.max().item()).unsqueeze(0).to(device), inputs_len.unsqueeze(1))
             scores = scores * length_masks
 
             if posteriors is not None and balance_ratio is not None:
                 # reweight scores according to repeated frame num
-                abs_positions = torch.arange(scores.size(1)).to(scores.device).unsqueeze(0).expand_as(scores).unsqueeze(-1)
+                abs_positions = torch.arange(scores.size(1)).to(device).unsqueeze(0).expand_as(scores).unsqueeze(-1)
                 kernel3_positions = locations_to_neighborhood(abs_positions.float(), locations, 3, 'replicate').squeeze(-1)
                 left_position, _, right_position = kernel3_positions.chunk(3, dim=-1)
                 phone_interval = torch.max(right_position - left_position, scores.new_ones(1)).squeeze(-1)
                 scores = scores / (1 + (phone_interval - 1) * balance_ratio)
 
-            outputs = scores.sum(dim=-1) / inputs_len.to(inputs.device)
+            outputs = scores.sum(dim=-1) / inputs_len.to(device)
         return outputs, locations
 
 
