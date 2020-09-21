@@ -254,7 +254,8 @@ class UnsModel(nn.Module):
                     '**REAL**  \n' + ' '.join([dev_data_set.idx2phn[idx] for idx in real[:l].tolist()]) + '  \n' +
                     '**FAKE**  \n' + ' '.join([dev_data_set.idx2phn[idx] for idx in fake[:l].tolist()])
                 )
-                self.log_writer.add_text(f'sample_{batch_idx}', text, self.step)
+                sample_idx = log_indices.index(batch_idx)
+                self.log_writer.add_text(f'sample_{sample_idx}', text, self.step)
 
         step_fer = fers / fnums * 100
         return step_fer
