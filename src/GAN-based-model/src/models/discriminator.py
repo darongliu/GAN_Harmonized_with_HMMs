@@ -150,7 +150,7 @@ class WeakDiscriminator(nn.Module):
         outputs = outputs * mask
         return outputs.sum(1) / mask.sum(1)
     
-    def forward(self, inputs, inputs_len=None, posteriors=None, balance_ratio=None):
+    def forward(self, inputs, inputs_len=None, posteriors=None, balance_ratio=None, locations=None):
         outputs = self.embedding(inputs)
 
         if posteriors is not None:
@@ -196,7 +196,7 @@ class WeakDiscriminator(nn.Module):
                 scores = scores / (1 + (phone_interval - 1) * balance_ratio)
 
             outputs = scores.sum(dim=-1) / inputs_len.to(inputs.device)
-        return outputs
+        return outputs, locations
 
 
 class LocalDiscriminator(nn.Module):
@@ -270,7 +270,7 @@ class LocalDiscriminator(nn.Module):
         alpha = torch.rand(real_valid_patterns.size(0)).to(real.device).unsqueeze(-1).unsqueeze(-1)
         inter_patterns = real_valid_patterns + (fake_valid_patterns - real_valid_patterns) * alpha
         inter_len = torch.ones(len(inter_patterns)).long().to(real.device)
-        inter_pred = self.forward(inter_patterns.unsqueeze(1), inter_len.unsqueeze(1), None, balance_ratio, locations.unsqueeze(1))
+        inter_pred, _ = self.forward(inter_patterns.unsqueeze(1), inter_len.unsqueeze(1), None, balance_ratio, locations.unsqueeze(1))
 
         gp_grad_target = eval(f'{self.gp_grad_target}_valid_patterns')
         gradients = torch.autograd.grad(outputs=inter_pred, inputs=gp_grad_target,
@@ -319,7 +319,7 @@ class LocalDiscriminator(nn.Module):
             scores = scores / (1 + (phone_interval - 1) * balance_ratio)
 
         outputs = scores.sum(dim=-1) / inputs_len.to(inputs.device)
-        return outputs
+        return outputs, locations
 
 
 if __name__ == '__main__':

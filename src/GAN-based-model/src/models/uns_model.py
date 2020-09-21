@@ -107,13 +107,15 @@ class UnsModel(nn.Module):
         balance_ratio = None if self.frame_balance_schedular is None else self.frame_balance_schedular[step]
 
         if train_generator:
-            g_loss = self.dis_model.calc_g_loss(real_sample, target_len,
-                                                fake_sample, sample_len,
-                                                prob if self.use_posterior_bnd else None,
-                                                balance_ratio)
+            g_loss, locations = self.dis_model.calc_g_loss(real_sample, target_len,
+                                                           fake_sample, sample_len,
+                                                           prob if self.use_posterior_bnd else None,
+                                                           balance_ratio)
             seg_loss = None
             same_loss = None
             entropy_loss = None
+            avg_entropy_loss = None
+            location_entropy_loss = None
             
             if not self.use_posterior_bnd:
                 batch_size = fake_sample.size(0) // 2
@@ -128,8 +130,10 @@ class UnsModel(nn.Module):
                 same_loss = (1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)).mean()
                 avg_prob = prob.view(-1, prob.size(-1)).mean(dim=0)
                 entropy_loss = ((avg_prob + 1e-8).log() * avg_prob).sum()
+                avg_entropy_loss = -((prob + 1e-8).log() * prob).sum(dim=-1).mean()
+                location_entropy_loss = -((locations + 1e-8).log() * locations).sum(dim=-1).mean()
             
-            return g_loss, seg_loss, same_loss, entropy_loss, prob
+            return g_loss, seg_loss, same_loss, entropy_loss, avg_entropy_loss, location_entropy_loss, prob
         
         else:
             d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
@@ -186,7 +190,7 @@ class UnsModel(nn.Module):
                 sample_feat, sample_len, intra_diff_num = next(train_source)
                 target_idx, target_len = next(train_target)
 
-                gen_loss, gen_seg_loss, gen_same_loss, gen_entropy_loss, fake_probs = self.forward(
+                gen_loss, gen_seg_loss, gen_same_loss, gen_entropy_loss, gen_avg_entropy_loss, gen_location_entropy_loss, fake_probs = self.forward(
                     sample_feat, sample_len,
                     target_idx, target_len,
                     frame_temp, intra_diff_num,

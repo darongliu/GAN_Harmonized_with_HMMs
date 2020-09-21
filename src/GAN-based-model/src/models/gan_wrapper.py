@@ -67,7 +67,7 @@ class DisWrapper(nn.Module):
         if self.model_type == 'lstm':
             inter_target, inter_len = self._sort_sequences(inter_target, inter_len)
 
-        inter_pred = self.model(inter_target, inter_len, inter_prob, balance_ratio)
+        inter_pred, _ = self.model(inter_target, inter_len, inter_prob, balance_ratio)
 
         gradients = torch.autograd.grad(outputs=inter_pred, inputs=grad_target,
             grad_outputs=torch.ones(inter_pred.size()).to(device),
@@ -104,14 +104,14 @@ class DisWrapper(nn.Module):
             real, real_len = self._sort_sequences(real, real_len)
             fake, fake_len = self._sort_sequences(fake, fake_len)
 
-        real_pred = self.model(real, real_len)
+        real_pred, _ = self.model(real, real_len)
         if prob is None:
-            fake_pred = self.model(fake, fake_len)
+            fake_pred, locations = self.model(fake, fake_len)
         else:
-            fake_pred = self.model(fake, fake_len, prob, balance_ratio)
+            fake_pred, locations = self.model(fake, fake_len, prob, balance_ratio)
 
         g_loss = real_pred.mean() - fake_pred.mean()
-        return g_loss
+        return g_loss, locations
 
     def calc_d_loss(self, real, real_len, fake, fake_len, prob=None, balance_ratio=None):
         """
@@ -129,12 +129,12 @@ class DisWrapper(nn.Module):
             real, real_len = self._sort_sequences(real, real_len)
             fake, fake_len = self._sort_sequences(fake, fake_len)
 
-        real_pred = self.model(real, real_len)
+        real_pred, _ = self.model(real, real_len)
         if prob is None:
-            fake_pred = self.model(fake, fake_len)
+            fake_pred, _ = self.model(fake, fake_len)
             gp_loss = self.calc_gp(real, real_len, fake, fake_len)
         else:
-            fake_pred = self.model(fake, fake_len, prob, balance_ratio)
+            fake_pred, _ = self.model(fake, fake_len, prob, balance_ratio)
             gp_loss = self.calc_phone_posterior_gp(real, real_len, fake, fake_len, prob, balance_ratio)
 
         d_loss = fake_pred.mean() - real_pred.mean()
