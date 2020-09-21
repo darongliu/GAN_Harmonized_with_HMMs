@@ -1,3 +1,4 @@
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -204,7 +205,8 @@ class LocalDiscriminator(nn.Module):
         dim: channels
     """
     def __init__(self, phn_size, dis_emb_dim, hidden_dim1, hidden_dim2, use_second_conv=True, max_len=None,
-                 max_conv_bank_kernel=9, window_per_phn=3, gb_tau=0.5, gb_hard=True, eps=1e-8, **kwargs):
+                 max_conv_bank_kernel=9, window_per_phn=3, gb_tau=0.5, gb_hard=True,
+                 gp_inter_target='gumbel', gp_grad_target='gumbel', eps=1e-8, **kwargs):
         # max_conv_kernel: means conv bank kernel is 3,5,...max_conv_kernel
         super().__init__()
         self.max_len = max_len
@@ -214,6 +216,8 @@ class LocalDiscriminator(nn.Module):
         self.window_per_phn = window_per_phn
         self.gb_tau = gb_tau
         self.gb_hard = gb_hard
+        self.gp_inter_target = gp_inter_target
+        self.gp_grad_target = gp_grad_target
         self.eps = eps
 
         assert(max_conv_bank_kernel % 2 == 1)
@@ -240,14 +244,54 @@ class LocalDiscriminator(nn.Module):
     def embedding(self, x):
         return x @ self.emb_bag.weight
 
-    def forward(self, inputs, inputs_len=None, posteriors=None, balance_ratio=None):
+    def calc_gp(self, real, real_len, fake, fake_len, prob, balance_ratio):
+        subseqlen = self.max_conv_bank_kernel + 2 if self.use_second_conv else 0
+        real_unfolded = F.unfold(real.transpose(1, 2).unsqueeze(-1), (subseqlen, 1), padding=(subseqlen // 2, 0)).transpose(1, 2)
+        real_unfolded = real_unfolded.reshape(*real_unfolded.shape[:2], subseqlen, real.size(-1))
+        locations = posteriors_to_locations(prob, subseqlen, self.window_per_phn)
+        prob_unfolded = locations_to_neighborhood(prob, locations)
+        
+        real_length_mask = torch.lt(torch.arange(real.size(1)).unsqueeze(0), real_len.unsqueeze(-1))
+        real_valid_patterns = real_unfolded[real_length_mask.nonzero(as_tuple=True)]
+        
+        prob_length_mask = torch.lt(torch.arange(prob.size(1)).unsqueeze(0), fake_len.unsqueeze(-1))
+        prob_valid_indices = prob_length_mask.nonzero(as_tuple=True)
+        prob_valid_patterns = prob_unfolded[prob_valid_indices]
+        locations = locations[prob_valid_indices]
+        gumbel_valid_patterns = F.gumbel_softmax((prob_valid_patterns + self.eps).log(), self.gb_tau, self.gb_hard, dim=-1)
+
+        fake_valid_patterns = eval(f'{self.gp_inter_target}_valid_patterns')
+        indices = random.sample(range(fake_valid_patterns.size(0)), real_valid_patterns.size(0))
+        fake_valid_patterns = fake_valid_patterns[indices]
+        locations = locations[indices]
+        assert fake_valid_patterns.shape == real_valid_patterns.shape
+        assert fake_valid_patterns.size(0) == locations.size(0)
+
+        alpha = torch.rand(real_valid_patterns.size(0)).to(real.device).unsqueeze(-1).unsqueeze(-1)
+        inter_patterns = real_valid_patterns + (fake_valid_patterns - real_valid_patterns) * alpha
+        inter_len = torch.ones(len(inter_patterns)).long().to(real.device)
+        inter_pred = self.forward(inter_patterns.unsqueeze(1), inter_len.unsqueeze(1), None, balance_ratio, locations.unsqueeze(1))
+
+        gp_grad_target = eval(f'{self.gp_grad_target}_valid_patterns')
+        gradients = torch.autograd.grad(outputs=inter_pred, inputs=gp_grad_target,
+            grad_outputs=torch.ones(inter_pred.size()).to(device),
+            create_graph=True, retain_graph=True, only_inputs=True)[0]
+        
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        return gradient_penalty
+
+    def create_patterns(self, posteriors):
+        subseqlen = self.max_conv_bank_kernel + 2 if self.use_second_conv else 0
+        locations = posteriors_to_locations(posteriors, subseqlen, self.window_per_phn)
+        # locations: (batch_size, seqlen, kernel_size, window_size)
+        inputs = locations_to_neighborhood(posteriors, locations)
+        # inputs: (batch_size, seqlen, kernel_size, class_num)
+        inputs = F.gumbel_softmax((inputs + self.eps).log(), self.gb_tau, self.gb_hard, dim=-1)
+        return inputs, locations
+
+    def forward(self, inputs, inputs_len=None, posteriors=None, balance_ratio=None, locations=None):
         if posteriors is not None:
-            subseqlen = self.max_conv_bank_kernel + 2 if self.use_second_conv else 0
-            locations = posteriors_to_locations(posteriors, subseqlen, self.window_per_phn)
-            # locations: (batch_size, seqlen, kernel_size, window_size)
-            inputs = locations_to_neighborhood(posteriors, locations)
-            # inputs: (batch_size, seqlen, kernel_size, class_num)
-            inputs = F.gumbel_softmax((inputs + self.eps).log(), self.gb_tau, self.gb_hard, dim=-1)
+            inputs, locations = self.create_patterns(posteriors)
 
         outputs = self.embedding(inputs)
         outputs = torch.cat([conv(outputs) for conv in self.conv_1], dim=-1)
@@ -262,7 +306,8 @@ class LocalDiscriminator(nn.Module):
         scores = self.linear(outputs).squeeze(-1)
         # scores: (batch_size, seqlen)
 
-        length_masks = torch.lt(torch.arange(inputs_len.max().item()).unsqueeze(0), inputs_len.unsqueeze(1)).to(inputs.device)
+        length_masks = torch.lt(torch.arange(inputs_len.max()).unsqueeze(0).to(inputs.device), 
+                                inputs_len.unsqueeze(1).to(inputs.device))
         scores = scores * length_masks
 
         if posteriors is not None and balance_ratio is not None:

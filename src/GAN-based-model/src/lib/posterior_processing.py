@@ -58,16 +58,15 @@ def posteriors_to_locations(posteriors, kernel_size, window_per_phn):
     batch_size, seqlen, class_num = posteriors.shape
     half_kernel_size = (kernel_size - 1) // 2
 
-    left_locations, right_locations = None, None
-    if half_kernel_size > 0:
-        left_locations = posteriors_to_right_locations(
-            posteriors.flip(dims=[1]), half_kernel_size, window_per_phn
-        ).flip(dims=[1, 2, 3])
-        right_locations = posteriors_to_right_locations(
-            posteriors, half_kernel_size, window_per_phn
-        )
+    assert half_kernel_size > 0
+    left_locations = posteriors_to_right_locations(
+        posteriors.flip(dims=[1]), half_kernel_size, window_per_phn
+    ).flip(dims=[1, 2, 3])
+    right_locations = posteriors_to_right_locations(
+        posteriors, half_kernel_size, window_per_phn
+    )
 
-    return [left_locations, right_locations]
+    return torch.stack([left_locations, right_locations], dim=-1)
 
 
 def locations_to_neighborhood(features, locations, out_kernel_size=None, padding='zeros'):
@@ -77,9 +76,10 @@ def locations_to_neighborhood(features, locations, out_kernel_size=None, padding
             (batch_size, seqlen, feat_dim)
         locations:
             The output of posteriors_to_locations()
-            [(batch_size, seqlen, half_kernel_size, half_window_size), ...] of length 2:
+            (batch_size, seqlen, half_kernel_size, half_window_size, 2):
                 half_kernel_size = (kernel_size - 1) // 2
                 half_window_size = window_per_phn * half_kernel_size
+                2 = left and right
 
     Outputs:
         neighborhood:
@@ -87,7 +87,7 @@ def locations_to_neighborhood(features, locations, out_kernel_size=None, padding
     """
     locations = slice_locations(locations, out_kernel_size)
 
-    left_locations, right_locations = locations
+    left_locations, right_locations = locations.unbind(dim=-1)
     batch_size, seqlen, feat_dim = features.shape
     _, _, half_kernel_size, half_window_size = left_locations.shape
     
@@ -121,19 +121,19 @@ def slice_locations(locations, out_kernel_size=None):
     if out_kernel_size is None:
         return locations
 
-    left_locations, right_locations = locations
+    left_locations, right_locations = locations.unbind(dim=-1)
     out_half_kernel_size = (out_kernel_size - 1) // 2
     out_half_window_size = left_locations.size(-1) // left_locations.size(-2) * out_half_kernel_size
     left_locations = left_locations[:, :, -out_half_kernel_size:, -out_half_window_size:]
     right_locations = right_locations[:, :, :out_half_kernel_size, :out_half_window_size]
 
-    return [left_locations, right_locations]
+    return torch.stack([left_locations, right_locations], dim=-1)
 
 
 def locations_to_full_locations(locations, out_kernel_size=None):
     locations = slice_locations(locations, out_kernel_size)
 
-    left_locations, right_locations = locations
+    left_locations, right_locations = locations.unbind(dim=-1)
     batch_size, seqlen, half_kernel_size, half_window_size = left_locations.shape
 
     full_locations = left_locations.new_zeros(batch_size, seqlen, 2 * half_kernel_size + 1, 2 * half_window_size + 1)

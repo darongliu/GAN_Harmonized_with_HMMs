@@ -15,6 +15,7 @@ class DisWrapper(nn.Module):
     def __init__(self, phn_size, max_len, model_type, use_posterior_bnd=False, **model_config):
         super().__init__()
         self.model_type = model_type
+        self.model_config = model_config
         if model_type == 'cnn':
             self.model =     Discriminator(phn_size=phn_size, **model_config, max_len=max_len)
         elif model_type == 'lstm':
@@ -53,22 +54,29 @@ class DisWrapper(nn.Module):
 
         inter_pred = self.model(inter, inter_len, inter_prob, balance_ratio)
 
-        grad_target = inter if prob is None else inter_prob
-        gradients = torch.autograd.grad(outputs=inter_pred, inputs=grad_target,
-                grad_outputs=torch.ones(inter_pred.size()).to(device),
-                create_graph=True, retain_graph=True, only_inputs=True)[0]
+        gp_target = inter
+        if self.model_config.get('gp_target') == 'posterior':
+            assert inter_prob is not None
+            gp_target = inter_prob
+
+        gradients = torch.autograd.grad(outputs=inter_pred, inputs=gp_target,
+            grad_outputs=torch.ones(inter_pred.size()).to(device),
+            create_graph=True, retain_graph=True, only_inputs=True)[0]
 
         gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
         return gradient_penalty
 
     def calc_phone_posterior_gp(self, real, real_len, fake, fake_len, prob, balance_ratio=None):
-        frames_per_phone = max(round(fake_len.max().item() / real_len.max().item()), 1)
-        expanded_real = real.unsqueeze(2).expand(-1, -1, frames_per_phone, -1).reshape(real.size(0), -1, real.size(-1))
-        estimated_phone_len = real_len * frames_per_phone
-        min_len = torch.min(estimated_phone_len.long(), fake_len.long())
-        return self.calc_gp(expanded_real[:, :min_len.max()], min_len,
-                            fake[:, :min_len.max()], min_len,
-                            prob[:, :min_len.max()], balance_ratio)
+        if self.model_config.get('gp_level') == 'phone':
+            return self.model.calc_gp(real, real_len, fake, fake_len, prob, balance_ratio)
+        else:
+            frames_per_phone = max(round(fake_len.max().item() / real_len.max().item()), 1)
+            expanded_real = real.unsqueeze(2).expand(-1, -1, frames_per_phone, -1).reshape(real.size(0), -1, real.size(-1))
+            estimated_phone_len = real_len * frames_per_phone
+            min_len = torch.min(estimated_phone_len.long(), fake_len.long())
+            return self.calc_gp(expanded_real[:, :min_len.max()], min_len,
+                                fake[:, :min_len.max()], min_len,
+                                prob[:, :min_len.max()], balance_ratio)
 
     def calc_g_loss(self, real, real_len, fake, fake_len, prob=None, balance_ratio=None):
         """
