@@ -50,6 +50,11 @@ weak_cnn:
   hidden_dim2: 256
   use_second_conv: True
   window_per_phn: 3
+  gb_tau: 1
+  gb_hard: False
+  gp_align_level: frame
+  gp_inter_target: gumbel_resample
+  gp_grad_target: gumbel_resample
 local_cnn:
   dis_emb_dim: 256
   hidden_dim1: 256

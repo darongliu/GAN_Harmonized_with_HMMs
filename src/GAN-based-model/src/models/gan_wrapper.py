@@ -15,7 +15,14 @@ class DisWrapper(nn.Module):
     def __init__(self, phn_size, max_len, model_type, use_posterior_bnd=False, **model_config):
         super().__init__()
         self.model_type = model_type
-        self.model_config = model_config
+        self.model_config = {
+            'gb_tau': 0.5,
+            'gb_hard': False,
+            'gp_align_level': 'frame',
+            'gp_inter_target': 'gumbel',
+            'gp_grad_target': 'gumbel',
+            **model_config,
+        }
         if model_type == 'cnn':
             self.model =     Discriminator(phn_size=phn_size, **model_config, max_len=max_len)
         elif model_type == 'lstm':
@@ -43,23 +50,26 @@ class DisWrapper(nn.Module):
         size = [batch_size] + [1] * (real.dim()-1)
         alpha = torch.rand(size).to(device)
 
-        inter = real + alpha * (fake - real)
+        inter_gumbel = real + alpha * (fake - real)
         inter_prob = None
         if prob is not None:
             inter_prob = real + alpha * (prob - real)
+            inter_gumbel_resample = F.gumbel_softmax(
+                (inter_prob + 1e-8).log(),
+                self.model_config['gb_tau'],
+                self.model_config['gb_hard'],
+                dim=-1
+            )
+        inter_target = eval(f'inter_{self.model_config["gp_inter_target"]}')
+        grad_target = eval(f'inter_{self.model_config["gp_grad_target"]}')
 
         inter_len = torch.stack([real_len, fake_len]).min(0)[0]
         if self.model_type == 'lstm':
-            inter, inter_len = self._sort_sequences(inter, inter_len)
+            inter_target, inter_len = self._sort_sequences(inter_target, inter_len)
 
-        inter_pred = self.model(inter, inter_len, inter_prob, balance_ratio)
+        inter_pred = self.model(inter_target, inter_len, inter_prob, balance_ratio)
 
-        gp_target = inter
-        if self.model_config.get('gp_target') == 'posterior':
-            assert inter_prob is not None
-            gp_target = inter_prob
-
-        gradients = torch.autograd.grad(outputs=inter_pred, inputs=gp_target,
+        gradients = torch.autograd.grad(outputs=inter_pred, inputs=grad_target,
             grad_outputs=torch.ones(inter_pred.size()).to(device),
             create_graph=True, retain_graph=True, only_inputs=True)[0]
 
@@ -67,7 +77,7 @@ class DisWrapper(nn.Module):
         return gradient_penalty
 
     def calc_phone_posterior_gp(self, real, real_len, fake, fake_len, prob, balance_ratio=None):
-        if self.model_config.get('gp_level') == 'phone':
+        if self.model_config['gp_align_level'] == 'phone':
             return self.model.calc_gp(real, real_len, fake, fake_len, prob, balance_ratio)
         else:
             frames_per_phone = max(round(fake_len.max().item() / real_len.max().item()), 1)
