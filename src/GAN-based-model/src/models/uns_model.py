@@ -139,7 +139,7 @@ class UnsModel(nn.Module):
                 entropy_loss = -((avg_prob + 1e-8).log() * avg_prob).sum()
                 avg_entropy_loss = -((valid_prob + 1e-8).log() * valid_prob).sum(dim=-1).mean()
                 
-                valid_locations = locations[valid_indices].view(-1, locations.size(-1))
+                valid_locations = locations[valid_indices].transpose(-1, -2).reshape(-1, locations.size(-2))
                 normalized_locations = valid_locations / (valid_locations.sum(dim=-1, keepdim=True) + 1e-8)
                 location_entropy_loss = -((normalized_locations + 1e-8).log() * normalized_locations).sum(dim=-1).mean()
             
