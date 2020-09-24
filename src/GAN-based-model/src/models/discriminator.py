@@ -118,15 +118,11 @@ class WeakDiscriminator(nn.Module):
             self.lrelu_2 = nn.LeakyReLU()
         self.flatten = nn.Flatten()
 
-        if not self.local_discriminate:
-            hidden_dim = hidden_dim2 if use_second_conv else hidden_dim1
-            if max_len is not None:
-                    self.linear = nn.Linear(max_len * SECOND_CONV_NUM * hidden_dim, 1)
-            else:
-                    self.linear = nn.Linear(SECOND_CONV_NUM * hidden_dim, 1)
+        hidden_dim = len(self.conv_2) * hidden_dim2 if use_second_conv else len(self.conv_1) * hidden_dim1
+        if not self.local_discriminate and max_len is not None:
+            self.linear = nn.Linear(max_len * hidden_dim, 1)
         else:
-            hidden_dim = SECOND_CONV_NUM * hidden_dim2 if use_second_conv else len(self.conv_1) * hidden_dim1
-            self.linear = nn.Linear(hidden_dim, 1)        
+            self.linear = nn.Linear(hidden_dim, 1)
 
         self._spec_init()
 
@@ -230,8 +226,8 @@ class LocalDiscriminator(nn.Module):
             self.lrelu_2 = nn.LeakyReLU()
         self.flatten = nn.Flatten()
 
-        hidden_dim = SECOND_CONV_NUM * hidden_dim2 if use_second_conv else len(self.conv_1) * hidden_dim1
-        self.linear = nn.Linear(hidden_dim, 1)        
+        hidden_dim = len(self.conv_2) * hidden_dim2 if use_second_conv else len(self.conv_1) * hidden_dim1
+        self.linear = nn.Linear(hidden_dim, 1)
 
         self._spec_init()
 
@@ -283,7 +279,7 @@ class LocalDiscriminator(nn.Module):
         return gradient_penalty
 
     def create_patterns(self, posteriors):
-        subseqlen = self.max_conv_bank_kernel + 2 if self.use_second_conv else 0
+        subseqlen = self.max_conv_bank_kernel + SECOND_CONV_KERNEL - 1 if self.use_second_conv else self.max_conv_bank_kernel
         locations = posteriors_to_locations(posteriors, subseqlen, self.window_per_phn)
         # locations: (batch_size, seqlen, kernel_size, window_size)
         inputs = locations_to_neighborhood(posteriors, locations)
