@@ -12,11 +12,12 @@ test_orc_bnd_path: 'timit_for_GAN/audio/timit-test-orc1-bnd.pkl'
 test_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
 
 # Model
+# regularizer
+g_seg_ratio: 50
+d_gp_ratio: 10
 # generator
 gen_hidden_size: 512
 # others
-seg_loss_ratio: 0.5
-penalty_ratio: 10
 frame_temp: 0.9
 
 # discriminator

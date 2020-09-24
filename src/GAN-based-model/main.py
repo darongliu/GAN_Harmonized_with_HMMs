@@ -43,8 +43,8 @@ def print_model_parameter(config):
     print ('Model Parameter:')
     print (f'   generator first layer:     {config.gen_hidden_size}')
     print (f'   frame temperature:         {config.frame_temp}')
-    print (f'   intra-segment loss ratio:  {config.seg_loss_ratio}')
-    print (f'   gradient penalty ratio:    {config.penalty_ratio}')
+    print (f'   intra-segment loss ratio:  {config.g_seg_ratio}')
+    print (f'   gradient penalty ratio:    {config.d_gp_ratio}')
 
     print (f'   discriminator model type:     {config.model_type}')
     print (f'   use maxlen:                   {config.use_maxlen}')

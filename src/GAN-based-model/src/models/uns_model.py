@@ -111,47 +111,57 @@ class UnsModel(nn.Module):
         balance_ratio = None if self.frame_balance_schedular is None else self.frame_balance_schedular[step]
 
         if train_generator:
+            g_loss = None
+            g_seg_regu = None
+            g_same_regu = None
+            g_entropy_regu = None
+            g_avg_entropy_regu = None
+            g_location_entropy_regu = None
+            g_location_maxprob_regu = None
+
             g_loss, locations = self.dis_model.calc_g_loss(real_sample, target_len,
                                                            fake_sample, sample_len,
                                                            prob if self.use_posterior_bnd else None,
                                                            balance_ratio)
-            seg_loss = None
-            same_loss = None
-            entropy_loss = None
-            avg_entropy_loss = None
-            location_entropy_loss = None
             
             if not self.use_posterior_bnd:
                 batch_size = fake_sample.size(0) // 2
                 intra_diff_num = intra_diff_num.to(device)
-                seg_loss = self.gen_model.calc_intra_loss(intra_sample[:batch_size],
-                                                          intra_sample[batch_size:],
-                                                          intra_diff_num)
+                g_seg_regu = self.gen_model.calc_intra_loss(intra_sample[:batch_size],
+                                                            intra_sample[batch_size:],
+                                                            intra_diff_num)
             else:
                 estimated_phone_num = ((1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)) * sample_len_masks[:, :-1]).sum(dim=-1) + 1
                 estimated_frame_phone_ratio = torch.true_divide(sample_len, estimated_phone_num).mean(dim=0, keepdim=True)
-                seg_loss = F.l1_loss(estimated_frame_phone_ratio, torch.ones(1).to(device) * self.config.frame_phone_ratio)
-                same_loss = ((1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)) * sample_len_masks[:, :-1]).sum(dim=-1).true_divide(sample_len).mean()
+                g_seg_regu = F.l1_loss(estimated_frame_phone_ratio, torch.ones(1).to(device) * self.config.frame_phone_ratio)
+                g_same_regu = ((1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)) * sample_len_masks[:, :-1]).sum(dim=-1).true_divide(sample_len).mean()
                 
                 valid_indices = sample_len_masks.nonzero(as_tuple=True)
                 valid_prob = prob[valid_indices].view(-1, prob.size(-1))
                 avg_prob = valid_prob.mean(dim=0)
-                entropy_loss = -((avg_prob + 1e-8).log() * avg_prob).sum()
-                avg_entropy_loss = -((valid_prob + 1e-8).log() * valid_prob).sum(dim=-1).mean()
+                g_entropy_regu = ((avg_prob + 1e-8).log() * avg_prob).sum()
+                g_avg_entropy_regu = ((valid_prob + 1e-8).log() * valid_prob).sum(dim=-1).mean()
                 
                 valid_locations = locations[valid_indices].transpose(-1, -2).reshape(-1, locations.size(-2))
+                g_location_maxprob_regu = valid_locations.max(dim=-1).values.mean()
                 normalized_locations = valid_locations / (valid_locations.sum(dim=-1, keepdim=True) + 1e-8)
-                location_entropy_loss = -((normalized_locations + 1e-8).log() * normalized_locations).sum(dim=-1).mean()
+                g_location_entropy_regu = ((normalized_locations + 1e-8).log() * normalized_locations).sum(dim=-1).mean()
             
-            return g_loss, seg_loss, same_loss, entropy_loss, avg_entropy_loss, location_entropy_loss, prob
+            vs = locals()
+            regus = {key: vs[key] for key in list(vs.keys()) if 'regu' in key}
+            return g_loss, regus, prob
         
         else:
-            d_loss, gp_loss = self.dis_model.calc_d_loss(real_sample, target_len,
-                                                         fake_sample, sample_len,
-                                                         prob if self.use_posterior_bnd else None,
-                                                         balance_ratio)
-            
-            return d_loss, gp_loss
+            d_loss = None
+            d_gp_regu = None
+
+            d_loss, d_gp_regu = self.dis_model.calc_d_loss(real_sample, target_len,
+                                                           fake_sample, sample_len,
+                                                           prob if self.use_posterior_bnd else None,
+                                                           balance_ratio)
+            vs = locals()
+            regus = {key: vs[key] for key in list(vs.keys()) if 'regu' in key}
+            return d_loss, regus
 
 
     def train(self, train_data_set, dev_data_set=None, aug=False):
@@ -182,17 +192,22 @@ class UnsModel(nn.Module):
                 sample_feat, sample_len, intra_diff_num = next(train_source)
                 target_idx, target_len = next(train_target)
 
-                dis_loss, dis_gp_loss = self.forward(
+                d_loss, d_regus = self.forward(
                     sample_feat, sample_len,
                     target_idx, target_len,
                     frame_temp, intra_diff_num,
                     self.step, train_generator=False
                 )
-                dis_total_loss = dis_loss
-                dis_total_loss = dis_total_loss + (0 if dis_gp_loss is None else self.config.penalty_ratio * dis_gp_loss)
-                dis_total_loss.backward()
+                locals().update(d_regus)
 
-                dis_clip_grad = nn.utils.clip_grad_norm_(self.dis_model.parameters(), 5.0)
+                d_total_loss = d_loss
+                for key in d_regus.keys():
+                    if d_regus[key] is not None:
+                        ratio = getattr(self.config, key.replace('regu', 'ratio'), 0)
+                        d_total_loss  = d_total_loss + ratio * d_regus[key]
+                d_total_loss.backward()
+
+                d_clip_grad = nn.utils.clip_grad_norm_(self.dis_model.parameters(), 5.0)
                 self.dis_optim.step()
 
             for _ in range(self.config.gen_iter):
@@ -200,37 +215,40 @@ class UnsModel(nn.Module):
                 sample_feat, sample_len, intra_diff_num = next(train_source)
                 target_idx, target_len = next(train_target)
 
-                gen_loss, gen_seg_loss, gen_same_loss, gen_entropy_loss, gen_avg_entropy_loss, gen_location_entropy_loss, fake_probs = self.forward(
+                g_loss, g_regus, fake_probs = self.forward(
                     sample_feat, sample_len,
                     target_idx, target_len,
                     frame_temp, intra_diff_num,
                     self.step, train_generator=True
                 )
-                gen_total_loss = gen_loss
-                gen_total_loss = gen_total_loss + (0 if gen_seg_loss is None else self.config.seg_loss_ratio * gen_seg_loss)
-                gen_total_loss = gen_total_loss + (0 if gen_same_loss is None else self.config.same_loss_ratio * gen_same_loss)
-                gen_total_loss = gen_total_loss - (0 if gen_entropy_loss is None else self.config.entropy_loss_ratio * gen_entropy_loss)
-                gen_total_loss.backward()
+                locals().update(g_regus)
 
-                gen_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
+                g_total_loss = g_loss
+                for key in g_regus.keys():
+                    if g_regus[key] is not None:
+                        ratio = getattr(self.config, key.replace('regu', 'ratio'), 0)
+                        g_total_loss  = g_total_loss + ratio * g_regus[key]
+                g_total_loss.backward()
+
+                g_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
                 self.gen_optim.step()
 
             vs = locals()
-            for name in list(vs.keys()):
-                if ('loss' in name or 'grad' in name) and vs[name] is not None:
-                    logging[f'{name.split("_")[0]}/{name}'].append(vs[name].item() if type(vs[name]) is torch.Tensor else vs[name])
+            for key in list(vs.keys()):
+                if ('loss' in key or 'regu' in key or 'grad' in key) and vs[key] is not None:
+                    logging[f'{key.split("_")[0]}/{key}'].append(vs[key].item() if type(vs[key]) is torch.Tensor else vs[key])
             
             if self.step % self.config.print_step == 0:
                 # log scalars
-                for name, values in logging.items():
-                    self.log_writer.add_scalar(name, torch.FloatTensor(values).mean().item(), self.step)
+                for key, values in logging.items():
+                    self.log_writer.add_scalar(key, torch.FloatTensor(values).mean().item(), self.step)
                 logging = defaultdict(list)
 
                 # log fake frame-sequences
                 fake_pred = fake_probs.detach().argmax(dim=-1)
                 length_masks = torch.lt(length_mask[:max(sample_len)].unsqueeze(0), sample_len.to(device).unsqueeze(-1))
                 fake_phone_num = ((fake_pred[:, :-1] != fake_pred[:, 1:]) * length_masks[:, :-1]).sum(dim=-1).float().mean().item() + 1
-                self.log_writer.add_scalar('gen/fake_real_phone_ratio', fake_phone_num / target_len.float().mean().item(), self.step)
+                self.log_writer.add_scalar('g/fake_real_phone_ratio', fake_phone_num / target_len.float().mean().item(), self.step)
 
             if self.step % self.config.eval_step == 0:
                 step_fer = self.dev(dev_data_set)
