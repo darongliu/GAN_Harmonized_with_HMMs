@@ -15,7 +15,7 @@ test_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
 # regularizer
 g_seg_ratio: 50
 g_same_ratio: 50
-g_entropy_ratio: 50
+g_entropy_ratio: -50
 g_avg_entropy_ratio: 0
 g_location_entropy_ratio: 0
 d_gp_ratio: 1.0e-5

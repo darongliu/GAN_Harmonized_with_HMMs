@@ -140,13 +140,13 @@ class UnsModel(nn.Module):
                 valid_indices = sample_len_masks.nonzero(as_tuple=True)
                 valid_prob = prob[valid_indices].view(-1, prob.size(-1))
                 avg_prob = valid_prob.mean(dim=0)
-                g_entropy_regu = ((avg_prob + 1e-8).log() * avg_prob).sum()
-                g_avg_entropy_regu = ((valid_prob + 1e-8).log() * valid_prob).sum(dim=-1).mean()
+                g_entropy_regu = -((avg_prob + 1e-8).log() * avg_prob).sum()
+                g_avg_entropy_regu = -((valid_prob + 1e-8).log() * valid_prob).sum(dim=-1).mean()
                 
                 valid_locations = locations[valid_indices].transpose(-1, -2).reshape(-1, locations.size(-2))
                 g_location_maxprob_regu = valid_locations.max(dim=-1).values.mean()
                 normalized_locations = valid_locations / (valid_locations.sum(dim=-1, keepdim=True) + 1e-8)
-                g_location_entropy_regu = ((normalized_locations + 1e-8).log() * normalized_locations).sum(dim=-1).mean()
+                g_location_entropy_regu = -((normalized_locations + 1e-8).log() * normalized_locations).sum(dim=-1).mean()
             
             vs = locals()
             regus = {key: vs[key] for key in list(vs.keys()) if 'regu' in key}
