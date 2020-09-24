@@ -312,9 +312,15 @@ class LocalDiscriminator(nn.Module):
             # reweight scores according to repeated frame num
             abs_positions = torch.arange(scores.size(1)).to(scores.device).unsqueeze(0).expand_as(scores).unsqueeze(-1)
             kernel3_positions = locations_to_neighborhood(abs_positions.float(), locations, 3, 'replicate').squeeze(-1)
-            left_position, _, right_position = kernel3_positions.chunk(3, dim=-1)
-            phone_interval = torch.max(right_position - left_position, scores.new_ones(1)).squeeze(-1)
-            scores = scores / (1 + (phone_interval - 1) * balance_ratio)
+            left_position, _, right_position = kernel3_positions.unbind(dim=-1)
+            frame_num = (right_position - left_position).detach() - 1
+            # if right_position=10, left_positions=8, means this phone only has one frame, which is 10 - 8 - 1
+            assert (frame_num < 1).sum() > 0
+            frame_num = 1 + (frame_num - 1) * balance_ratio
+            scores = scores / frame_num
+            all_phone_num = (1 / frame_num).sum(dim=-1)
+            assert all_phone_num.shape == inputs_len.shape
+            inputs_len = all_phone_num
 
         outputs = scores.sum(dim=-1) / inputs_len.to(inputs.device)
         return outputs, locations
