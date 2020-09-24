@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import os
+import re
 import sys
 import random
 import _pickle as pk
@@ -235,8 +236,8 @@ class UnsModel(nn.Module):
 
             vs = locals()
             for key in list(vs.keys()):
-                if ('loss' in key or 'regu' in key or 'grad' in key) and vs[key] is not None:
-                    logging[f'{key.split("_")[0]}/{key}'].append(vs[key].item() if type(vs[key]) is torch.Tensor else vs[key])
+                if re.fullmatch('(g|d)_.*(loss|regu|grad)', key) and vs[key] is not None:
+                    logging[f'{key.split('_')[0]}/{key}'].append(vs[key].item() if type(vs[key]) is torch.Tensor else vs[key])
             
             if self.step % self.config.print_step == 0:
                 # log scalars

@@ -243,7 +243,7 @@ class LocalDiscriminator(nn.Module):
 
     def calc_gp(self, real, real_len, fake, fake_len, prob, balance_ratio):
         device = real.device
-        subseqlen = self.max_conv_bank_kernel + 2 if self.use_second_conv else 0
+        subseqlen = self.max_conv_bank_kernel + 2 if self.use_second_conv else self.max_conv_bank_kernel
         real_unfolded = F.unfold(real.transpose(1, 2).unsqueeze(-1), (subseqlen, 1), padding=(subseqlen // 2, 0)).transpose(1, 2)
         real_unfolded = real_unfolded.reshape(*real_unfolded.shape[:2], subseqlen, real.size(-1))
         locations = posteriors_to_locations(prob, subseqlen, self.window_per_phn)
