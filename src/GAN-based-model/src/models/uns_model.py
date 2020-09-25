@@ -136,16 +136,19 @@ class UnsModel(nn.Module):
                 estimated_frame_phone_ratio = torch.true_divide(sample_len, estimated_phone_num).mean(dim=0, keepdim=True)
                 g_seg_regu = F.l1_loss(estimated_frame_phone_ratio, torch.ones(1).to(device) * self.config.frame_phone_ratio)
                 g_same_regu = ((1 - (prob[:, :-1, :] * prob[:, 1:, :]).sum(dim=-1)) * sample_len_masks[:, :-1]).sum(dim=-1).true_divide(sample_len).mean()
-                
                 valid_indices = sample_len_masks.nonzero(as_tuple=True)
+
                 valid_prob = prob[valid_indices].view(-1, prob.size(-1))
+                g_maxprob_regu = valid_prob.max(dim=-1).values.mean()
+                g_entropy_regu = -((valid_prob + 1e-8).log() * valid_prob).sum(dim=-1).mean()
+
                 avg_prob = valid_prob.mean(dim=0)
-                g_entropy_regu = -((avg_prob + 1e-8).log() * avg_prob).sum()
-                g_avg_entropy_regu = -((valid_prob + 1e-8).log() * valid_prob).sum(dim=-1).mean()
+                g_avg_maxprob_regu = avg_prob.max(dim=-1).values.mean()
+                g_avg_entropy_regu = -((avg_prob + 1e-8).log() * avg_prob).sum()
                 
                 valid_locations = locations[valid_indices].transpose(-1, -2).reshape(-1, locations.size(-2))
-                g_location_maxprob_regu = valid_locations.max(dim=-1).values.mean()
                 normalized_locations = valid_locations / (valid_locations.sum(dim=-1, keepdim=True) + 1e-8)
+                g_location_maxprob_regu = normalized_locations.max(dim=-1).values.mean()
                 g_location_entropy_regu = -((normalized_locations + 1e-8).log() * normalized_locations).sum(dim=-1).mean()
             
             vs = locals()
