@@ -99,7 +99,8 @@ class WeakDiscriminator(nn.Module):
         dim: channels
     """
     def __init__(self, phn_size, dis_emb_dim, hidden_dim1, hidden_dim2, use_second_conv=True, max_len=None,
-                 max_conv_bank_kernel=9, window_per_phn=3, local_discriminate=False, eps=1e-8, **kwargs):
+                 max_conv_bank_kernel=9, window_per_phn=3, local_discriminate=False, locations_grad=True, neighbors_grad=True,
+                 eps=1e-8, **kwargs):
         # max_conv_kernel: means conv bank kernel is 3,5,...max_conv_kernel
         super().__init__()
         self.max_len = max_len
@@ -108,6 +109,8 @@ class WeakDiscriminator(nn.Module):
         self.max_conv_bank_kernel = max_conv_bank_kernel
         self.window_per_phn = window_per_phn
         self.local_discriminate = local_discriminate
+        self.locations_grad = locations_grad
+        self.neighbors_grad = neighbors_grad
         self.eps = eps
 
         assert(max_conv_bank_kernel % 2 == 1)
@@ -153,7 +156,7 @@ class WeakDiscriminator(nn.Module):
         if posteriors is not None:
             locations = posteriors_to_locations(posteriors, self.max_conv_bank_kernel, self.window_per_phn)
             # locations: (batch_size, seqlen, kernel_size, window_size)
-            outputs = locations_to_neighborhood(outputs, locations)
+            outputs = locations_to_neighborhood(outputs, locations, None, self.locations_grad, self.neighbors_grad)
             # outputs: (batch_size, seqlen, kernel_size, class_num)
 
         outputs = torch.cat([conv(outputs) for conv in self.conv_1], dim=-1)
@@ -163,7 +166,7 @@ class WeakDiscriminator(nn.Module):
         if self.use_second_conv:
 
             if posteriors is not None:
-                outputs = locations_to_neighborhood(outputs, locations, SECOND_CONV_KERNEL)
+                outputs = locations_to_neighborhood(outputs, locations, SECOND_CONV_KERNEL, self.locations_grad, self.neighbors_grad)
 
             outputs = torch.cat([conv(outputs) for conv in self.conv_2], dim=-1)
             outputs = self.lrelu_2(outputs)
@@ -186,11 +189,19 @@ class WeakDiscriminator(nn.Module):
 
             if posteriors is not None and balance_ratio is not None:
                 # reweight scores according to repeated frame num
-                abs_positions = torch.arange(scores.size(1)).to(device).unsqueeze(0).expand_as(scores).unsqueeze(-1)
-                kernel3_positions = locations_to_neighborhood(abs_positions.float(), locations, 3, 'replicate').squeeze(-1)
-                left_position, _, right_position = kernel3_positions.chunk(3, dim=-1)
-                phone_interval = torch.max(right_position - left_position, scores.new_ones(1)).squeeze(-1)
-                scores = scores / (1 + (phone_interval - 1) * balance_ratio)
+                abs_positions = torch.arange(scores.size(1)).to(scores.device).unsqueeze(0).expand_as(scores)
+                kernel3_positions = locations_to_neighborhood(abs_positions.float().unsqueeze(-1), locations, 3, padding='replicate').squeeze(-1)
+                left_position, _, right_position = kernel3_positions.unbind(dim=-1)
+                assert ((right_position - abs_positions) < 1).sum() == 0
+                assert ((left_position - abs_positions) > -1).sum() == 0
+                frame_num = (right_position - left_position).detach() - 1
+                # right_position=10, left_positions=8, means the phone only has one frame: 10-8-1=1
+                assert (frame_num < 1).sum() == 0
+                frame_num = 1 + (frame_num - 1) * balance_ratio
+                scores = scores / frame_num
+                all_phone_num = (1 / frame_num).sum(dim=-1)
+                assert all_phone_num.shape == inputs_len.shape
+                inputs_len = all_phone_num
 
             outputs = scores.sum(dim=-1) / inputs_len.to(device)
         return outputs, locations
@@ -203,7 +214,8 @@ class LocalDiscriminator(nn.Module):
     """
     def __init__(self, phn_size, dis_emb_dim, hidden_dim1, hidden_dim2, use_second_conv=True, max_len=None,
                  max_conv_bank_kernel=9, window_per_phn=3, gb_tau=0.5, gb_hard=True,
-                 gp_inter_target='gumbel', gp_grad_target='gumbel', eps=1e-8, **kwargs):
+                 gp_inter_target='gumbel', gp_grad_target='gumbel', locations_grad=True, neighbors_grad=True,
+                 eps=1e-8, **kwargs):
         # max_conv_kernel: means conv bank kernel is 3,5,...max_conv_kernel
         super().__init__()
         self.max_len = max_len
@@ -215,6 +227,8 @@ class LocalDiscriminator(nn.Module):
         self.gb_hard = gb_hard
         self.gp_inter_target = gp_inter_target
         self.gp_grad_target = gp_grad_target
+        self.locations_grad = locations_grad
+        self.neighbors_grad = neighbors_grad
         self.eps = eps
 
         assert(max_conv_bank_kernel % 2 == 1)
@@ -282,7 +296,7 @@ class LocalDiscriminator(nn.Module):
         subseqlen = self.max_conv_bank_kernel + SECOND_CONV_KERNEL - 1 if self.use_second_conv else self.max_conv_bank_kernel
         locations = posteriors_to_locations(posteriors, subseqlen, self.window_per_phn)
         # locations: (batch_size, seqlen, kernel_size, window_size)
-        inputs = locations_to_neighborhood(posteriors, locations)
+        inputs = locations_to_neighborhood(posteriors, locations, None, self.locations_grad, self.neighbors_grad)
         # inputs: (batch_size, seqlen, kernel_size, class_num)
         inputs = F.gumbel_softmax((inputs + self.eps).log(), self.gb_tau, self.gb_hard, dim=-1)
         return inputs, locations
@@ -310,12 +324,14 @@ class LocalDiscriminator(nn.Module):
 
         if posteriors is not None and balance_ratio is not None:
             # reweight scores according to repeated frame num
-            abs_positions = torch.arange(scores.size(1)).to(scores.device).unsqueeze(0).expand_as(scores).unsqueeze(-1)
-            kernel3_positions = locations_to_neighborhood(abs_positions.float(), locations, 3, 'replicate').squeeze(-1)
+            abs_positions = torch.arange(scores.size(1)).to(scores.device).unsqueeze(0).expand_as(scores)
+            kernel3_positions = locations_to_neighborhood(abs_positions.float().unsqueeze(-1), locations, 3, padding='replicate').squeeze(-1)
             left_position, _, right_position = kernel3_positions.unbind(dim=-1)
+            assert ((right_position - abs_positions) < 1).sum() == 0
+            assert ((left_position - abs_positions) > -1).sum() == 0
             frame_num = (right_position - left_position).detach() - 1
-            # if right_position=10, left_positions=8, means this phone only has one frame, which is 10 - 8 - 1
-            assert (frame_num < 1).sum() > 0
+            # right_position=10, left_positions=8, means the phone only has one frame: 10-8-1=1
+            assert (frame_num < 1).sum() == 0
             frame_num = 1 + (frame_num - 1) * balance_ratio
             scores = scores / frame_num
             all_phone_num = (1 / frame_num).sum(dim=-1)

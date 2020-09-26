@@ -39,7 +39,9 @@ def posteriors_to_right_locations(posteriors, half_kernel_size, window_per_phn):
             windows.append(window)
         locations.append(torch.stack(windows, dim=0).sum(dim=0))
 
-    return torch.stack(locations, dim=2)[:, :seqlen, :, :]
+    locations = torch.stack(locations, dim=2)[:, :seqlen, :, :]
+    locations = locations / (locations.sum(dim=-1, keepdim=True) + 1e-8)
+    return locations
 
 
 def posteriors_to_locations(posteriors, kernel_size, window_per_phn):
@@ -69,7 +71,9 @@ def posteriors_to_locations(posteriors, kernel_size, window_per_phn):
     return torch.stack([left_locations, right_locations], dim=-1)
 
 
-def locations_to_neighborhood(features, locations, out_kernel_size=None, padding='zeros'):
+def locations_to_neighborhood(features, locations, out_kernel_size=None,
+                              locations_grad=True, neighbors_grad=True,
+                              padding='zeros'):
     """
     Arguments:
         features:
@@ -85,6 +89,9 @@ def locations_to_neighborhood(features, locations, out_kernel_size=None, padding
         neighborhood:
             (batch_size, seqlen, kernel_size, feat_dim)
     """
+    if not locations_grad:
+        locations = locations.detach()
+
     locations = slice_locations(locations, out_kernel_size)
 
     left_locations, right_locations = locations.unbind(dim=-1)
@@ -95,8 +102,8 @@ def locations_to_neighborhood(features, locations, out_kernel_size=None, padding
         padding = features.new_zeros(batch_size, half_window_size, feat_dim)
         padded_features = torch.cat([padding, features, padding], dim=1)
     elif padding == 'replicate':
-        left_padding = features[:, 0:1, :].expand(batch_size, half_window_size, feat_dim)
-        right_padding = features[:, -1:, :].expand(batch_size, half_window_size, feat_dim)
+        left_padding = features[:, 0:1, :].expand(batch_size, half_window_size, feat_dim) - 1
+        right_padding = features[:, -1:, :].expand(batch_size, half_window_size, feat_dim) + 1
         padded_features = torch.cat([left_padding, features, right_padding], dim=1)
     else:
         raise NotImplementedError
@@ -112,6 +119,10 @@ def locations_to_neighborhood(features, locations, out_kernel_size=None, padding
             right_locations[:, :, :, i:i+1] * 
             padded_features[:, half_window_size+i+1:half_window_size+seqlen+i+1, :].unsqueeze(2)
         )
+
+    if not neighbors_grad:
+        left_neighborhood = left_neighborhood.detach()
+        right_neighborhood = right_neighborhood.detach()
     neighborhood = torch.cat([left_neighborhood, features.unsqueeze(2), right_neighborhood], dim=2)
 
     return neighborhood
