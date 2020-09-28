@@ -64,6 +64,8 @@ local_cnn:
   gp_align_level: phone
   gp_inter_target: gumbel
   gp_grad_target: gumbel
+  locations_grad: True
+  neighbors_grad: True
 
 # Data loader
 phn_max_length: 75

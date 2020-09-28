@@ -58,6 +58,8 @@ weak_cnn:
   gp_align_level: frame
   gp_inter_target: gumbel_resample
   gp_grad_target: gumbel_resample
+  locations_grad: True
+  neighbors_grad: True
 local_cnn:
   dis_emb_dim: 256
   hidden_dim1: 256
