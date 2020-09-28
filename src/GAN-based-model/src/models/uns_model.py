@@ -16,6 +16,7 @@ from src.data.dataLoader import get_data_loader, get_dev_data_loader
 from src.models.gan_wrapper import GenWrapper, DisWrapper
 from src.lib.utils import gen_real_sample, pad_sequence
 from src.lib.metrics import frame_eval, per_eval
+from src.lib.posterior_processing import stats_locations
 
 import torch_optimizer as optim # from https://github.com/jettify/pytorch-optimizer.git
 
@@ -112,14 +113,6 @@ class UnsModel(nn.Module):
         balance_ratio = None if self.frame_balance_schedular is None else self.frame_balance_schedular[step]
 
         if train_generator:
-            g_loss = None
-            g_seg_regu = None
-            g_same_regu = None
-            g_entropy_regu = None
-            g_avg_entropy_regu = None
-            g_location_entropy_regu = None
-            g_location_maxprob_regu = None
-
             g_loss, locations = self.dis_model.calc_g_loss(real_sample, target_len,
                                                            fake_sample, sample_len,
                                                            prob if self.use_posterior_bnd else None,
@@ -146,19 +139,18 @@ class UnsModel(nn.Module):
                 g_avg_maxprob_regu = avg_prob.max(dim=-1).values.mean()
                 g_avg_entropy_regu = -((avg_prob + 1e-8).log() * avg_prob).sum()
                 
-                valid_locations = locations[valid_indices].transpose(-1, -2).reshape(-1, locations.size(-2))
-                normalized_locations = valid_locations / (valid_locations.sum(dim=-1, keepdim=True) + 1e-8)
-                g_location_maxprob_regu = normalized_locations.max(dim=-1).values.mean()
-                g_location_entropy_regu = -((normalized_locations + 1e-8).log() * normalized_locations).sum(dim=-1).mean()
+                locations_stats = stats_locations(locations, valid_indices)
+                for i, (maxprob, entropy) in enumerate(zip(*locations_stats)):
+                    locals()[f'g_neighbor_{i}_maxprob_regu'] = maxprob
+                    locals()[f'g_neighbor_{i}_entropy_regu'] = entropy
+                g_neighbor_avg_maxprob_regu = torch.stack(locations_stats[0], dim=0).mean()
+                g_neighbor_avg_entropy_regu = torch.stack(locations_stats[1], dim=0).mean()
             
             vs = locals()
             regus = {key: vs[key] for key in list(vs.keys()) if 'regu' in key}
             return g_loss, regus, prob
         
         else:
-            d_loss = None
-            d_gp_regu = None
-
             d_loss, d_gp_regu = self.dis_model.calc_d_loss(real_sample, target_len,
                                                            fake_sample, sample_len,
                                                            prob if self.use_posterior_bnd else None,

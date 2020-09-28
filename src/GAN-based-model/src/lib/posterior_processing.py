@@ -153,6 +153,36 @@ def slice_locations(locations, out_kernel_size=None):
     return torch.stack([left_locations, right_locations], dim=-1)
 
 
+def stats_locations(locations, valid_indices):
+    # locations: (batch_size, seqlen, half_kernel_size, half_window_size, 2)
+    locations_valid = locations[valid_indices]
+    # locations: (batch_size * seqlen, half_kernel_size, half_window_size, 2)
+    left_locations, right_locations = locations_valid.unbind(dim=-1)
+    left_locations_flipped = left_locations.flip(dims=[1, 2])
+    locations_symmetric = torch.stack([left_locations_flipped, right_locations], dim=-1)
+    # locations_symmetric: (batch_size * seqlen, half_kernel_size, half_window_size, 2)
+    distributions = locations_symmetric.permute(1, 0, 3, 2)
+    # distributions: (half_kernel_size, batch_size * seqlen, 2, half_window_size)
+    flat_dists = distributions.reshape(distributions.size(0), -1, distributions.size(-1))
+
+    maxprobs = []
+    entropies = []
+    for j, kernel_location in enumerate(flat_dists):
+        # kernel_location: (batch_size * seqlen * 2, half_window_size)
+        window_per_phn = locations.size(3) // locations.size(2)
+        valid_start, valid_end = j, (j + 1) * window_per_phn
+        assert torch.allclose(kernel_location[:, :valid_start], kernel_location.new_zeros(1))
+        assert j == distributions.size(0) - 1 or torch.allclose(kernel_location[:, valid_end:], kernel_location.new_zeros(1))
+        valid_mask = kernel_location.new_zeros(distributions.size(-1))
+        valid_mask[valid_start : valid_end] = 1
+
+        maxprob = kernel_location.max(dim=-1).values.mean()
+        entropy = (-kernel_location * (kernel_location + 1e-12).log() * valid_mask).sum(dim=-1).mean()
+        maxprobs.append(maxprob)
+        entropies.append(entropy)
+    return maxprobs, entropies
+
+
 def locations_to_full_locations(locations, out_kernel_size=None):
     locations = slice_locations(locations, out_kernel_size)
 
