@@ -113,7 +113,7 @@ def locations_to_neighborhood(features, locations, out_kernel_size=None,
     if padding == 'zeros':
         padding = features.new_zeros(batch_size, half_window_size, feat_dim)
         padded_features = torch.cat([padding, features, padding], dim=1)
-    elif padding == 'replicate':
+    elif padding == 'position':
         left_padding = features[:, 0:1, :].expand(batch_size, half_window_size, feat_dim) - 1
         right_padding = features[:, -1:, :].expand(batch_size, half_window_size, feat_dim) + 1
         padded_features = torch.cat([left_padding, features, right_padding], dim=1)

@@ -194,7 +194,7 @@ class WeakDiscriminator(nn.Module):
             if posteriors is not None and balance_ratio is not None:
                 # reweight scores according to repeated frame num
                 abs_positions = torch.arange(scores.size(1)).to(scores.device).unsqueeze(0).expand_as(scores)
-                kernel3_positions = locations_to_neighborhood(abs_positions.float().unsqueeze(-1), locations, 3, padding='replicate').squeeze(-1)
+                kernel3_positions = locations_to_neighborhood(abs_positions.float().unsqueeze(-1), locations, 3, padding='position').squeeze(-1)
                 left_position, _, right_position = kernel3_positions.unbind(dim=-1)
                 assert ((right_position - abs_positions) < 1 - self.atol)[valid_indices].sum() == 0
                 assert ((left_position - abs_positions) > -1 + self.atol)[valid_indices].sum() == 0
@@ -332,7 +332,7 @@ class LocalDiscriminator(nn.Module):
         if posteriors is not None and balance_ratio is not None:
             # reweight scores according to repeated frame num
             abs_positions = torch.arange(scores.size(1)).to(scores.device).unsqueeze(0).expand_as(scores)
-            kernel3_positions = locations_to_neighborhood(abs_positions.float().unsqueeze(-1), locations, 3, padding='replicate').squeeze(-1)
+            kernel3_positions = locations_to_neighborhood(abs_positions.float().unsqueeze(-1), locations, 3, padding='position').squeeze(-1)
             left_position, _, right_position = kernel3_positions.unbind(dim=-1)
             assert ((right_position - abs_positions) < 1 - self.atol)[valid_indices].sum() == 0
             assert ((left_position - abs_positions) > -1 + self.atol)[valid_indices].sum() == 0
