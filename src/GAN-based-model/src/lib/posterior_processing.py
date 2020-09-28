@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 
-def posteriors_to_right_locations(posteriors, half_kernel_size, window_per_phn):
+def posteriors_to_right_locations(posteriors, half_kernel_size, window_per_phn, eps=1e-12):
     """
     Arguments:
         posteriors:
@@ -37,11 +37,23 @@ def posteriors_to_right_locations(posteriors, half_kernel_size, window_per_phn):
             window = posteriors.new_zeros(*locations[0].shape)
             window[:, :seqlen, i+1:j*window_per_phn+i+1] = locations[j-1][:, i+1:seqlen+i+1, :j*window_per_phn] * locations[0][:, :seqlen, i:i+1]
             windows.append(window)
-        locations.append(torch.stack(windows, dim=0).sum(dim=0))
+        kernel_location = torch.stack(windows, dim=0).sum(dim=0)
+        locations.append(kernel_location)
 
-    locations = torch.stack(locations, dim=2)[:, :seqlen, :, :]
-    locations = locations / (locations.sum(dim=-1, keepdim=True) + 1e-8)
-    return locations
+    locations_normed = []
+    for j, kernel_location in enumerate(locations):
+        valid_start, valid_end = j, (j + 1) * window_per_phn
+        assert torch.allclose(kernel_location[:, :seqlen, :valid_start], kernel_location.new_zeros(1))
+        assert j == half_kernel_size - 1 or torch.allclose(kernel_location[:, :seqlen, valid_end:], kernel_location.new_zeros(1))
+        valid_mask = posteriors.new_zeros(locations[0].size(-1)).unsqueeze(0).unsqueeze(0)
+        valid_mask[:, :, valid_start:valid_end] = 1
+        kernel_location_eps = kernel_location + kernel_location.new_ones(1, 1, 1).expand_as(kernel_location) * eps * valid_mask
+        kernel_location_normed = kernel_location_eps / kernel_location_eps.sum(dim=-1, keepdim=True)
+        assert torch.allclose((kernel_location_normed * valid_mask).sum(dim=-1), kernel_location_normed.new_ones(1), atol=1e-12)
+        locations_normed.append(kernel_location_normed)
+
+    locations_normed = torch.stack(locations_normed, dim=2)[:, :seqlen, :, :]
+    return locations_normed
 
 
 def posteriors_to_locations(posteriors, kernel_size, window_per_phn):
