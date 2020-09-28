@@ -30,6 +30,7 @@ def posteriors_to_right_locations(posteriors, half_kernel_size, window_per_phn, 
         same = same_to_right[:, i : seqlen + i]
         locations[0][:, :seqlen, i] = cumulatively_same * (1 - same)
         cumulatively_same = cumulatively_same * same
+    locations[0][:, seqlen:, :window_per_phn] = 1 / window_per_phn
 
     for j in range(1, half_kernel_size):
         windows = []
@@ -44,7 +45,7 @@ def posteriors_to_right_locations(posteriors, half_kernel_size, window_per_phn, 
     for j, kernel_location in enumerate(locations):
         valid_start, valid_end = j, (j + 1) * window_per_phn
         assert torch.allclose(kernel_location[:, :seqlen, :valid_start], kernel_location.new_zeros(1))
-        assert j == half_kernel_size - 1 or torch.allclose(kernel_location[:, :seqlen, valid_end:], kernel_location.new_zeros(1))
+        assert torch.allclose(kernel_location[:, :seqlen, valid_end:], kernel_location.new_zeros(1))
         valid_mask = posteriors.new_zeros(locations[0].size(-1)).unsqueeze(0).unsqueeze(0)
         valid_mask[:, :, valid_start:valid_end] = 1
         kernel_location_eps = kernel_location + kernel_location.new_ones(1, 1, 1).expand_as(kernel_location) * eps * valid_mask
@@ -222,7 +223,7 @@ if __name__ == '__main__':
 
     list_of_idx = [0] * 5 + [1] * 3 + [2] * 6 + [3] * 2
     phones = torch.LongTensor(list_of_idx * (100 // len(list_of_idx))).to(args.device)
-    phones_onehot = F.one_hot(phones, num_classes=args.phn_num).unsqueeze(0).expand(args.batch_size, -1, -1)
+    phones_onehot = F.one_hot(phones, num_classes=args.phn_num).unsqueeze(0).expand(args.batch_size, -1, -1).float()
 
     start = time()
     locations = posteriors_to_locations(phones_onehot, args.kernel_size, args.window_per_phn)
@@ -270,7 +271,7 @@ if __name__ == '__main__':
         phoneseq_onehot.float().transpose(1, 2).unsqueeze(-1),
         kernel_size=(args.out_kernel_size, 1),
         padding=((args.out_kernel_size - 1) // 2, 0),
-    ).long().view(args.batch_size, args.phn_num, args.out_kernel_size, -1).transpose(1, 3)
+    ).view(args.batch_size, args.phn_num, args.out_kernel_size, -1).transpose(1, 3)
 
     pivot = 0
     real_neighborhood = [phoneseq_unfolded[:, pivot, :, :]]
