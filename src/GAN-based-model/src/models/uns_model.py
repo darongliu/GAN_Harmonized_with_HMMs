@@ -91,7 +91,7 @@ class UnsModel(nn.Module):
         target_idx = target_idx.to(device)
         target_len = target_len.to(device)
 
-        prob, soft_prob, hard_prob = self.gen_model(sample_feat, frame_temp, sample_len)
+        prob, soft_prob, hard_prob = self.gen_model(sample_feat, frame_temp, sample_len) # masked
         sample_len_masks = torch.lt(torch.arange(sample_len.max()).to(device).unsqueeze(0), sample_len.unsqueeze(-1))
 
         if self.config.gan_gumbel == 'soft':
@@ -109,7 +109,7 @@ class UnsModel(nn.Module):
             intra_sample = prob
 
         
-        real_sample = gen_real_sample(target_idx, target_len, self.config.phn_size).to(device)
+        real_sample = gen_real_sample(target_idx, target_len, self.config.phn_size).to(device) # masked one-hot vector
         balance_ratio = None if self.frame_balance_schedular is None else self.frame_balance_schedular[step]
 
         if train_generator:
@@ -167,6 +167,7 @@ class UnsModel(nn.Module):
         train_source, train_target = get_data_loader(train_data_set,
                                                      batch_size=self.config.batch_size,
                                                      repeat=self.config.repeat,
+                                                     sample_range=self.config.sample_range,
                                                      use_posterior_bnd=self.use_posterior_bnd)
         train_source, train_target = iter(train_source), iter(train_target)
 
@@ -232,15 +233,15 @@ class UnsModel(nn.Module):
             vs = locals()
             for key in list(vs.keys()):
                 if re.fullmatch('(g|d)_.*(loss|regu|grad)', key) and vs[key] is not None:
-                    logging[f'{key.split("_")[0]}/{key}'].append(vs[key].item() if type(vs[key]) is torch.Tensor else vs[key])
+                    logging[f'{key.split("_")[0]}/{key}'].append(vs[key].item() if type(vs[key]) is torch.Tensor else vs[key]) # accumulate the value
             
             if self.step % self.config.print_step == 0:
                 # log scalars
                 for key, values in logging.items():
-                    self.log_writer.add_scalar(key, torch.FloatTensor(values).mean().item(), self.step)
+                    self.log_writer.add_scalar(key, torch.FloatTensor(values).mean().item(), self.step) # logging the avg of several steps
                 logging = defaultdict(list)
 
-                # log fake frame-sequences
+                # log the ratio: len(predicted fake phoneme sequence)/len(oracle fake phoneme sequence)
                 fake_pred = fake_probs.detach().argmax(dim=-1)
                 length_masks = torch.lt(length_mask[:max(sample_len)].unsqueeze(0), sample_len.to(device).unsqueeze(-1))
                 fake_phone_num = ((fake_pred[:, :-1] != fake_pred[:, 1:]) * length_masks[:, :-1]).sum(dim=-1).float().mean().item() + 1
