@@ -96,7 +96,7 @@ if __name__ == "__main__":
     phn_map_path      = f'{args.data_dir}/phones.60-48-39.map.txt'
 
     target_path = os.path.join(args.data_dir, 'timit_for_GAN/text', args.setting+'_lm.48')
-    data_length = None
+    data_length = config.get('train_data_length')
     print_bar()
 
     ######################################################################

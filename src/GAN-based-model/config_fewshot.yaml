@@ -1,0 +1,102 @@
+#Source path
+train_feat_path: 'timit_for_GAN/audio/timit-train-mfcc-nor.pkl'
+train_orc_bnd_path: 'timit_for_GAN/audio/timit-train-orc1-bnd.pkl'
+train_phn_path: 'timit_for_GAN/audio/timit-train-phn.pkl'
+train_data_length: 10
+
+dev_feat_path: 'timit_for_GAN/audio/timit-test-mfcc-nor.pkl'
+dev_orc_bnd_path: 'timit_for_GAN/audio/timit-test-orc1-bnd.pkl'
+dev_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
+
+test_feat_path: 'timit_for_GAN/audio/timit-test-mfcc-nor.pkl'
+test_orc_bnd_path: 'timit_for_GAN/audio/timit-test-orc1-bnd.pkl'
+test_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
+
+# Model
+# regularizer
+g_seg_ratio: 50
+g_same_ratio: 50
+# g_maxprob_ratio
+g_entropy_ratio: 0
+# g_avg_maxprob_ratio
+g_avg_entropy_ratio: -50
+# g_neighbor_avg_maxprob_ratio
+g_neighbor_avg_entropy_ratio: 0
+d_gp_ratio: 1000
+# generator
+gen_hidden_size: 512
+# others
+frame_phone_ratio: 2
+frame_temp: 0.9
+frame_balance_ratio: 0.2
+frame_balance_scheduler: [1, 1]
+
+# discriminator
+target_augment_prob: 'None' # 'None' # [0.04, 0.84, 0.11, 0.01]
+use_maxlen: True # True, False
+model_type: 'local_cnn' # cnn, weak_cnn, lstm, transformer
+cnn:
+  dis_emb_dim: 256
+  hidden_dim: 256
+  num_layers: 4
+  kernel: 3
+  use_batchnorm: True
+lstm:
+  dis_emb_dim: 256
+  hidden_dim: 256
+  num_layers: 2
+  bidirectional: True
+transformer:
+  dis_emb_dim: 256
+  num_head: 8
+  hidden_dim: 256
+  num_layers: 4
+weak_cnn:
+  dis_emb_dim: 256
+  hidden_dim1: 256
+  hidden_dim2: 256
+  use_second_conv: True
+  window_per_phn: 3
+local_cnn:
+  dis_emb_dim: 256
+  hidden_dim1: 256
+  hidden_dim2: 256
+  use_second_conv: True
+  window_per_phn: 3
+  # gumbel softmax used for 1. after create patterns 2. after the interpolation in the gradient penalty
+  gb_tau: 1
+  gb_hard: False
+  # gp: gradient penalty 
+  # recommend gp_inter_target gp_grad_target to be the same
+  gp_align_level: phone # phone: model.cals_gp, frame: frame level interpolation
+  gp_inter_target: gumbel
+  gp_grad_target: gumbel
+
+  locations_grad: True
+  neighbors_grad: True
+
+# Data loader
+phn_max_length: 75
+feat_max_length: 777
+concat_window: 11
+sample_var: 0.15
+repeat: 3 # repeat every sample x times
+sample_range: [2,5]
+
+# Train
+batch_size: 3
+epoch: 2000 # for supervised training
+step: 20000 # for unsupervised training
+print_step: 20
+eval_step: 200
+gen_iter: 3
+dis_iter: 1
+gen_lr: 0.001
+dis_lr: 0.001
+sup_lr: 0.001
+optimizer: 'radam' # radam
+
+# gumbel
+gan_gumbel: 'soft' # no, soft, hard
+intra_gumbel: 'no'  # no, soft, hard
+output_gumbel: 'no'  # no, soft, hard
