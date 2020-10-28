@@ -131,7 +131,8 @@ class PickleDataset(Dataset):
             self.train_seq_length.append(min(len(bound)-1, self.phn_max_length))
 
     def process_target(self, target_path):
-        target_data = [line.strip().split() for line in open(target_path, 'r')]
+        target_data = [line.strip().split() for line in open(target_path, 'r').readlines()[:self.data_length]]
+        assert (len(target_data) == self.data_length)
         target_data = [[self.phn2idx[t] for t in target] for target in target_data]
         self.target_data = [torch.tensor(target).int() for target in target_data]
 
