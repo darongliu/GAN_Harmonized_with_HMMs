@@ -110,7 +110,7 @@ class UnsModel(nn.Module):
 
         
         real_sample = gen_real_sample(target_idx, target_len, self.config.phn_size).to(device) # masked one-hot vector
-        balance_ratio = None if self.frame_balance_schedular is None else self.frame_balance_schedular[step]
+        balance_ratio = None if self.frame_balance_schedular is None else self.frame_balance_schedular[step-1]  # for step is 1 to total_steps
 
         if train_generator:
             g_loss, locations = self.dis_model.calc_g_loss(real_sample, target_len,
