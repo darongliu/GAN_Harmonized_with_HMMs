@@ -90,6 +90,7 @@ if __name__ == "__main__":
         train_bnd_path    = f'{args.data_dir}/timit_for_GAN/audio/timit-train-{args.bnd_type}{args.iteration}-bnd.pkl'
     else:
         train_bnd_path    = f'{args.data_dir}/timit_for_GAN/audio/{args.overall_prefix}timit-train-{args.bnd_type}{args.iteration}-bnd.pkl'
+    test_bnd_path     = f'{args.data_dir}/timit_for_GAN/audio/timit-test-{args.bnd_type}{args.iteration}-bnd.pkl'
     output_path       = f'{args.save_dir}/train.pkl'
     phn_map_path      = f'{args.data_dir}/phones.60-48-39.map.txt'
 
@@ -136,6 +137,7 @@ if __name__ == "__main__":
                                        os.path.join(args.data_dir, config.train_feat_path),
                                        os.path.join(args.data_dir, config.train_phn_path),
                                        os.path.join(args.data_dir, config.train_orc_bnd_path),
+                                       train_bnd_path=train_bnd_path if args.mode == 'test_posterior' else None, 
                                        phn_map_path=phn_map_path,
                                        name='DATA LOADER(evaluation train)',
                                        mode='dev')
@@ -143,6 +145,7 @@ if __name__ == "__main__":
                                      os.path.join(args.data_dir, config.test_feat_path),
                                      os.path.join(args.data_dir, config.test_phn_path),
                                      os.path.join(args.data_dir, config.test_orc_bnd_path),
+                                     train_bnd_path=test_bnd_path if args.mode == 'test_posterior' else None, 
                                      phn_map_path=phn_map_path,
                                      name='DATA LOADER(evaluation test)',
                                      mode='dev')

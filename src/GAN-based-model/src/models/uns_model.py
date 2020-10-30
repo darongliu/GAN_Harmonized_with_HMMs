@@ -287,6 +287,7 @@ class UnsModel(nn.Module):
         fers, fnums = 0, 0
         fers_39, fnums_39 = 0, 0
         pers_39, pnums_39 = 0, 0
+        pers_39_segment_wise_generation, pnums_39_segment_wise_generation = 0, 0
 
         all_probs = pk.load(open(file_path, 'rb'))
 
@@ -297,6 +298,8 @@ class UnsModel(nn.Module):
         count = 0
         for _, frame_label, length in dev_source:
             prob = all_probs[count:count+len(length)]
+            train_bnd = dev_data_set.train_bnd[count:count+len(length)]
+            train_bnd_range = dev_data_set.train_bnd_range[count:count+len(length)]
             count += len(length)
             pred = prob.argmax(-1)
             frame_label = frame_label.numpy()
@@ -321,16 +324,31 @@ class UnsModel(nn.Module):
             frame_error_39, frame_num_39, _ = frame_eval(pred_39, frame_label_39, length)
             phone_error_39, phone_num_39, _ = per_eval(pred_39, frame_label_39, length)
 
+            # 39 segment wise per
+            pred_39_segment_wise_generation = np.zeros_like(pred)
+            l, w  = frame_label.shape
+            for i in range(l):
+                for j in range(len(train_bnd[i])):
+                    acc_post = prob[i][train_bnd[i][j]:train_bnd[i][j]+train_bnd_range[i][j]].sum(0)
+                    pred_39_segment = phn392idx[dev_data_set.phn_mapping[acc_post.argmax(-1)]]
+                    pred_39_segment_wise_generation[i, train_bnd[i][j]:train_bnd[i][j]+train_bnd_range[i][j]] = pred_39_segment 
+
+            phone_error_39_segment_wise_generation, phone_num_39_segment_wise_generation, _ = per_eval(pred_39_segment_wise_generation, frame_label_39, length)
+
             fers_39 += frame_error_39
             fnums_39 += frame_num_39
             pers_39 += phone_error_39
             pnums_39 += phone_num_39
+            pers_39_segment_wise_generation += phone_error_39_segment_wise_generation
+            pnums_39_segment_wise_generation += phone_num_39_segment_wise_generation
         step_fer = fers / fnums * 100
         step_fer_39 = fers_39 / fnums_39 * 100
         step_per_39 = pers_39 / pnums_39 * 100
+        step_per_39_segment_wise_generation = pers_39_segment_wise_generation / pnums_39_segment_wise_generation * 100
         print('fer:', step_fer)
         print('fer on phn 39: ', step_fer_39)
         print('per on phn 39: ', step_per_39)
+        print('segment wise per on phn 39: ', step_per_39_segment_wise_generation)
 
     def save_ckpt(self):
         ckpt_path = os.path.join(self.config.save_path, "ckpt_{}.pth".format(self.step))
