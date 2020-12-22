@@ -68,10 +68,10 @@ def get_data_loader(dataset, batch_size, repeat=6, random_batch=True, shuffle=Fa
 def get_dev_data_loader(dataset, batch_size, shuffle=False, drop_last=False):
     _collate_dev_fn = partial(_collate_sup_fn, padding_label=-100)
     loader = DataLoader(dataset.dev, batch_size=batch_size, collate_fn=_collate_dev_fn,
-                        shuffle=shuffle, drop_last=drop_last)
+                        shuffle=shuffle, drop_last=drop_last, num_workers=8)
     return loader
 
 def get_sup_data_loader(dataset, batch_size, shuffle=True, drop_last=True):
     loader = DataLoader(dataset.dev, batch_size=batch_size, collate_fn=_collate_sup_fn,
-                        shuffle=shuffle, drop_last=drop_last)
+                        shuffle=shuffle, drop_last=drop_last, num_workers=10)
     return loader

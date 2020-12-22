@@ -211,11 +211,11 @@ class SourceDataset(Dataset):
         self.concat_window = concat_window
 
     def concat(self, feat):
+        origin_length = len(feat)
         half_window = (self.concat_window-1) // 2
         _feat_ = np.concatenate([np.tile(feat[0], (half_window, 1)), feat,
                                     np.tile(feat[-1], (half_window, 1))], axis=0)
-        feature = torch.tensor([np.reshape(_feat_[l : l+self.concat_window], [-1])
-                                for l in range(len(feat))])
+        feature = torch.cat([torch.tensor(_feat_[l : l+origin_length]) for l in range(self.concat_window)], axis=-1)
         return feature
 
     def __len__(self):
@@ -237,11 +237,11 @@ class DevDataset(Dataset):
         self.concat_window = concat_window
     
     def concat(self, feat):
+        origin_length = len(feat)
         half_window = (self.concat_window-1) // 2
         _feat_ = np.concatenate([np.tile(feat[0], (half_window, 1)), feat,
                                     np.tile(feat[-1], (half_window, 1))], axis=0)
-        feature = torch.tensor([np.reshape(_feat_[l : l+self.concat_window], [-1])
-                                for l in range(len(feat))])
+        feature = torch.cat([torch.tensor(_feat_[l : l+origin_length]) for l in range(self.concat_window)], axis=-1)
         return feature
 
     def __len__(self):
