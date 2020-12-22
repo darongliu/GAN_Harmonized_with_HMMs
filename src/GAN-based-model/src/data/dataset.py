@@ -5,6 +5,7 @@ import random
 
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 
 class PickleDataset(Dataset):
@@ -93,20 +94,23 @@ class PickleDataset(Dataset):
 
     def process_feat(self, feats):
         assert len(feats) == self.data_length
-        half_window = (self.concat_window-1) // 2
         self.feat_dim = feats[0].shape[-1]
+        self.feats = [feats[i][:self.feat_max_length] for i in range(len(feats))]
+        '''
         self.feats = []
-        for feat in feats:
+        for feat in tqdm(feats):
             _feat_ = np.concatenate([np.tile(feat[0], (half_window, 1)), feat,
                                      np.tile(feat[-1], (half_window, 1))], axis=0)
             feature = torch.tensor([np.reshape(_feat_[l : l+self.concat_window], [-1])
                                     for l in range(len(feat))])[:self.feat_max_length]
             self.feats.append(feature)
+        '''
 
     def process_label(self, orc_bnd, phn_label):
+        print('start process label')
         assert len(orc_bnd) == len(phn_label) == self.data_length
         self.frame_labels = []
-        for bnd, phn in zip(orc_bnd, phn_label):
+        for bnd, phn in tqdm(zip(orc_bnd, phn_label)):
             assert len(bnd) == len(phn) + 1
             frame_label = []
             for prev_b, b, p in zip(bnd, bnd[1:], phn):
@@ -115,16 +119,29 @@ class PickleDataset(Dataset):
             self.frame_labels.append(torch.tensor(frame_label))
 
     def process_train_bnd(self, train_bnd_path):
+        print('start train bnd')
         train_bound = pickle.load(open(train_bnd_path, 'rb'))[:self.data_length]
         assert (len(train_bound) == self.data_length)
         self.train_bnd = []
         self.train_bnd_range = []
         self.train_seq_length = []
-        for bound in train_bound:
+        for bound in tqdm(train_bound):
             bound = torch.tensor(bound)
-            self.train_bnd.append(bound[:-1][:self.phn_max_length])
-            self.train_bnd_range.append((bound[1:] - bound[:-1])[:self.phn_max_length])
-            self.train_seq_length.append(min(len(bound)-1, self.phn_max_length))
+            bound = bound[:(self.phn_max_length+1)]
+            i = 1
+            while True:
+                if bound[-i] >= self.feat_max_length:
+                    i += 1
+                else:
+                    break
+            if i > 1:
+                if bound[-i] == self.feat_max_length-1:
+                    bound = bound[:-(i-1)]
+                else:
+                    bound = torch.cat([bound[:-(i-1)], torch.tensor([self.feat_max_length-1])], 0)
+            self.train_bnd.append(bound[:-1])
+            self.train_bnd_range.append((bound[1:] - bound[:-1]))
+            self.train_seq_length.append(len(bound)-1)
 
     def process_target(self, target_path):
         target_data = [line.strip().split() for line in open(target_path, 'r')]
@@ -136,9 +153,10 @@ class PickleDataset(Dataset):
             self.source = SourceDataset(self.feats,
                                         self.train_bnd,
                                         self.train_bnd_range,
-                                        self.train_seq_length)
+                                        self.train_seq_length, 
+                                        self.concat_window)
             self.target = TargetDataset(self.target_data, self.sil_idx, augment_prob=self.target_augment_prob)
-        self.dev = DevDataset(self.feats, self.frame_labels)
+        self.dev = DevDataset(self.feats, self.frame_labels, self.concat_window)
 
     def print_parameter(self, target=False):
         print ('Data Loader Parameter:')
@@ -184,18 +202,27 @@ class TargetDataset(Dataset):
         return torch.tensor(new_seq)
 
 class SourceDataset(Dataset):
-    def __init__(self, feats, train_bnd, train_bnd_range, train_seq_length):
+    def __init__(self, feats, train_bnd, train_bnd_range, train_seq_length, concat_window):
         self.feats = feats
         self.train_bnd = train_bnd
         self.train_bnd_range = train_bnd_range
         self.train_seq_length = train_seq_length
         assert len(feats) == len(train_bnd) == len(train_bnd_range) == len(train_seq_length)
+        self.concat_window = concat_window
+
+    def concat(self, feat):
+        half_window = (self.concat_window-1) // 2
+        _feat_ = np.concatenate([np.tile(feat[0], (half_window, 1)), feat,
+                                    np.tile(feat[-1], (half_window, 1))], axis=0)
+        feature = torch.tensor([np.reshape(_feat_[l : l+self.concat_window], [-1])
+                                for l in range(len(feat))])
+        return feature
 
     def __len__(self):
         return len(self.feats)
 
     def __getitem__(self, index):
-        feat = self.feats[index]
+        feat = self.concat(self.feats[index])
         train_bnd = self.train_bnd[index]
         train_bnd_range = self.train_bnd_range[index]
         train_seq_length = self.train_seq_length[index]
@@ -203,15 +230,24 @@ class SourceDataset(Dataset):
 
 
 class DevDataset(Dataset):
-    def __init__(self, feats, frame_labels):
+    def __init__(self, feats, frame_labels, concat_window):
         self.feats = feats
         self.frame_labels = frame_labels
         assert len(feats) == len(frame_labels)
+        self.concat_window = concat_window
+    
+    def concat(self, feat):
+        half_window = (self.concat_window-1) // 2
+        _feat_ = np.concatenate([np.tile(feat[0], (half_window, 1)), feat,
+                                    np.tile(feat[-1], (half_window, 1))], axis=0)
+        feature = torch.tensor([np.reshape(_feat_[l : l+self.concat_window], [-1])
+                                for l in range(len(feat))])
+        return feature
 
     def __len__(self):
         return len(self.feats)
 
     def __getitem__(self, index):
-        feat = self.feats[index]
+        feat = self.concat(self.feats[index])
         frame_label = self.frame_labels[index]
         return feat, frame_label
