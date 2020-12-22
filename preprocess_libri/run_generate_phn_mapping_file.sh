@@ -1,0 +1,1 @@
+python generate_phn_mapping_file.py --phn_list_path /home/darong/other_storage/librispeech_before_process/phoneset.txt --phn_mapping_path /home/darong/frequent_data/GAN_Harmonized_with_HMMs_librispeech/data/phones.60-48-39.map.txt

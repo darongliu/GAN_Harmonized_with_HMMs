@@ -1,0 +1,2 @@
+python check_if_all_phn_legal.py --lm_text_path /home/darong/frequent_data/GAN_Harmonized_with_HMMs_librispeech/data/timit_for_GAN/text/match_lm.48 --phn_mapping_path /home/darong/frequent_data/GAN_Harmonized_with_HMMs_librispeech/data/phones.60-48-39.map.txt
+python check_if_all_phn_legal.py --lm_text_path /home/darong/frequent_data/GAN_Harmonized_with_HMMs_librispeech/data/timit_for_GAN/text/nonmatch_lm.48 --phn_mapping_path /home/darong/frequent_data/GAN_Harmonized_with_HMMs_librispeech/data/phones.60-48-39.map.txt

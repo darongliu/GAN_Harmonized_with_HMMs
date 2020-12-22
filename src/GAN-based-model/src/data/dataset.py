@@ -27,7 +27,7 @@ class PickleDataset(Dataset):
                  train_bnd_path=None,                       # pretrained boundary data path
                  target_path=None,                          # text data path
                  data_length=None,                          # num of non-matching data, None would be set to len(feats)
-                 phn_map_path='./phones.60-48-39.map.txt',
+                 phn_map_path='',
                  name='DATA LOADER',
                  mode='train'):
         super().__init__()
@@ -80,16 +80,16 @@ class PickleDataset(Dataset):
         with open(phn_map_path, 'r') as f:
             for line in f:
                 if line.strip() != "":
-                    p60, p48, p39 = line.split()
+                    p60, p48, p39 = line.split() #71, 71, 40
                     phn_mapping[p48] = p39
 
         all_phn = list(phn_mapping.keys())
-        assert(len(all_phn) == 48)
+        assert(len(all_phn) == 71)
         self.phn_size = len(all_phn)
         self.phn2idx        = dict(zip(all_phn, range(len(all_phn))))
         self.idx2phn        = dict(zip(range(len(all_phn)), all_phn))
         self.phn_mapping    = dict([(i, phn_mapping[phn]) for i, phn in enumerate(all_phn)])
-        self.sil_idx = self.phn2idx['sil']
+        self.sil_idx = self.phn2idx['SIL']
 
     def process_feat(self, feats):
         assert len(feats) == self.data_length
