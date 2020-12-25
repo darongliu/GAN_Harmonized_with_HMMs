@@ -20,9 +20,14 @@ if __name__ == '__main__':
         all_lines = f.read().splitlines()
         for line in all_lines:
             phn = line.strip()
+            if phn == 'SIL':
+                phn = 'sil'
+            if phn == 'SPN':
+                phn = 'spn'
+
             reduce_phn = phn
-            if phn == 'SIL' or phn == 'SPN':
-                reduce_phn = 'SIL'
+            if phn == 'sil' or phn == 'spn':
+                reduce_phn = 'sil'
             if phn[-1] in '012':
                 reduce_phn = phn[:-1]
 

@@ -13,11 +13,11 @@ def addParser():
 
 def process_phn(phn):
     if phn == 'spn':
-        return 'SPN'
+        return 'spn'
     elif phn == 'sil':
-        return 'SIL'
+        return 'sil'
     elif phn == 'sp':
-        return 'SIL'
+        return 'sil'
     else:
         return phn
 
