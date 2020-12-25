@@ -84,7 +84,7 @@ class Decoder():
         #             L : maximum number of frames of one utterance
         #             P : dimension of original phone posterior 
         N,L,P = likelihood.shape
-        output = np.zeros((N,L,P+1))
+        output = np.zeros((N,L,P))
         output[:,:,:P] = likelihood
         output = output[:,:,trans_array]
         return output 
@@ -119,7 +119,7 @@ def get_trans_array(ori_phone_file, tgt_phone_file):
     #transform the orders of phone to kaldi format
     import utils
     ori = utils.read_phone_txt(ori_phone_file)
-    ori.append('spn')
+    # ori.append('spn')
     tgt = utils.read_phone_txt(tgt_phone_file,0)
     new_tgt = []
     for x in tgt:

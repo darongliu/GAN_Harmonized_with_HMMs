@@ -57,7 +57,7 @@ def read_phn_map(path):
         temp_phn_mapping[line.split()[1]] = line.split()[2]
 
     all_phn = list(temp_phn_mapping.keys())
-    assert(len(all_phn) == 48)
+    # assert(len(all_phn) == 48)
     phn2idx = dict(zip(all_phn, range(len(all_phn))))
     idx2phn = dict(zip(range(len(all_phn)), all_phn))
     phn_size = len(all_phn) 

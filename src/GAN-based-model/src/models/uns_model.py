@@ -105,6 +105,7 @@ class UnsModel(nn.Module):
     def train(self, train_data_set, dev_data_set=None, aug=False):
         print ('TRAINING(unsupervised)...')
         self.log_writer = SummaryWriter(self.config.save_path)
+        f_log = open(os.path.join(self.config.save_path, 'log'), 'w')
 
         ######################################################################
         # Build dataloader
@@ -181,11 +182,13 @@ class UnsModel(nn.Module):
             step_gp_loss += gp_loss / self.config.print_step
 
             if self.step % self.config.print_step == 0:
-                tqdm.write(f'Step: {self.step:5d} '+
-                           f'dis_loss: {step_dis_loss:.4f} '+
-                           f'gp_loss: {step_gp_loss:.4f} '+
-                           f'gen_loss: {step_gen_loss:.4f} '+
-                           f'seg_loss: {step_seg_loss:.4f}')
+                log = f'Step: {self.step:5d} '+ \
+                      f'dis_loss: {step_dis_loss:.4f} '+ \
+                      f'gp_loss: {step_gp_loss:.4f} '+ \
+                      f'gen_loss: {step_gen_loss:.4f} '+ \
+                      f'seg_loss: {step_seg_loss:.4f}'
+                f_log.write(log + '\n')
+                tqdm.write(log)
                 step_gen_loss, step_dis_loss, step_seg_loss, step_gp_loss = 0, 0, 0, 0
 
             ######################################################################
@@ -193,7 +196,9 @@ class UnsModel(nn.Module):
             #
             if self.step % self.config.eval_step == 0:
                 step_fer = self.dev(dev_data_set)
-                tqdm.write(f'EVAL max: {max_fer:.2f} step: {step_fer:.2f}')
+                f_log.write(log + '\n')
+                log = f'EVAL max: {max_fer:.2f} step: {step_fer:.2f}'
+                tqdm.write(log)
                 if step_fer < max_fer: 
                     max_fer = step_fer
                     self.save_ckpt()
