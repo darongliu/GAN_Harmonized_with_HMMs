@@ -8,10 +8,10 @@ prefix=${overall_prefix}${bnd_type}_iter${iteration}_${setting}_gan
 cd WFST-decoder
 python3 scripts/decode.py --set_type test --lm_type $setting \
                          --data_path $DATA_PATH --prefix $prefix \
-                         --jobs $jobs
+                         --jobs $jobs --lm_order $lm_order
 python3 scripts/decode.py --set_type train --lm_type $setting \
                          --data_path $DATA_PATH --prefix $prefix \
-                         --jobs $jobs
+                         --jobs $jobs --lm_order $lm_order
 cd ../
 
 # Evalution

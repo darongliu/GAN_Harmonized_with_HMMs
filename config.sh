@@ -13,3 +13,6 @@ export setting=match
 
 #Number of jobs
 export jobs=8
+
+#N-gram LM order
+export lm_order=3

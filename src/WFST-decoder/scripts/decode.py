@@ -152,6 +152,7 @@ def addParser():
     parser.add_argument('--data_path',  type=str, default='/home/guanyu/guanyu/handoff/data', help='')
     parser.add_argument('--prefix',     type=str, default='orc_iter1_match', help='')
     parser.add_argument('--jobs',       type=int, default=8, help='')
+    parser.add_argument('--lm_order',       type=int, default=3, help='')
     return parser
 
 
@@ -165,7 +166,7 @@ if __name__ == '__main__':
     likelihood    = pkl.load(open(f'{save_dir}/{args.set_type}.pkl', 'rb'))
     
     # Experiment dir
-    graph_dir     = f'{args.data_path}/wfst_data/{args.lm_type}/tree_sp0.95/graph_9gram'
+    graph_dir     = f'{args.data_path}/wfst_data/{args.lm_type}/tree_sp0.95/graph_{args.lm_order}gram'
     decode_dir    = f'{save_dir}/decode_{args.set_type}'
     posterior_dir = f'{save_dir}/posterior'
     output_file   = f'{save_dir}/{args.set_type}_output.txt'

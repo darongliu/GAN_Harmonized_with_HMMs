@@ -72,7 +72,7 @@ if [ $stage -le 2 ]; then
     [ ! -x scripts/score.sh ] && \
       echo "Not scoring because scripts/score.sh does not exist or not executable." && exit 1;
     echo "score best paths"
-    scripts/score.sh $scoring_opts --cmd "$cmd" $data $graphdir $dir
+    scripts/phn_score.sh $scoring_opts --cmd "$cmd" $data $graphdir $dir $model
     echo "score confidence and timing with sclite"
   fi
 fi

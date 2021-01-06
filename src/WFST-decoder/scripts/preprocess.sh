@@ -8,11 +8,11 @@ stage=0
 ## Given input
 prefix=$1  # match or nonmatch
 phone_map_txt=$2/phones.60-48-39.map.txt
-lm_text=$2/timit_for_GAN/text/${prefix}_lm.48
+lm_text=$2/timit_for_GAN/text/${prefix}_text_lm.48
 
 ## Hyperparameters
 self_loop_prob=0.95
-n_gram=9
+n_gram=3
 
 . ./utils/parse_options.sh
 
@@ -33,8 +33,10 @@ if [ $stage -le 0 ]; then
   mkdir -p $data
   python3 scripts/preprocess.py $phone_map_txt $phone_list_txt 
   
-  echo "$0: Preparing dict."
+  #echo "$0: Preparing dict."
   scripts/prepare_dict.sh $phone_list_txt $dict
+  cp $DATA_PATH/lexicon.txt $DATA_PATH/lexicon.txt.ori
+  cat $DATA_PATH/lexicon.txt.ori | sed 's/ SIL$/ sil/g' | sed 's/ SPN$/ spn/g' > $DATA_PATH/lexicon.txt
   
   echo "$0: Generating lang directory."
   utils/prepare_lang.sh --position_dependent_phones false \
