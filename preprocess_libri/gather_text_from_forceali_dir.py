@@ -27,6 +27,7 @@ if __name__ == '__main__':
 
             line = open(os.path.join(args.input_dir, f_name)).read().splitlines()
             assert(len(line)==1)
+            line = line[0]
             new_line = ' '.join(line.split()[2:])
             all_output_lines.append(new_line.strip())
 
@@ -35,5 +36,5 @@ if __name__ == '__main__':
             f.write(line)
             f.write('\n')
         print(f'output total {len(all_output_lines)} lines')
-    
+
     pk.dump(all_name, open(args.output_meta_path, 'wb'))
