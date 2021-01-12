@@ -2,7 +2,8 @@ all_origin_dir='/home/darong/other_storage/librispeech_before_process/darong'
 all_target_dir='/home/darong/frequent_data/GAN_Harmonized_with_HMMs_librispeech/data/timit_for_GAN/audio'
 
 # libri100
-python extract_wave2vec2.py --source_dir_path $all_origin_dir/train-clean-100 \
+python extract_wave2vec2.py --split 3 \
+                            --source_dir_path $all_origin_dir/train-clean-100 \
                             --target_meta_path $all_target_dir/timit-train-meta.pkl \
                             --target_phn_path $all_target_dir/timit-train-phn.pkl \
                             --target_wav2vec2_path $all_target_dir/timit-train-wave2vec2.pkl \
