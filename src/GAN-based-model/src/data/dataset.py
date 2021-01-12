@@ -48,8 +48,9 @@ class PickleDataset(Dataset):
             feats = []
             suffix=1
             while os.path.isfile(feat_path+'.'+str(suffix)):
-                feats += pickle.load(open(feat_path+'.'+str(suffix), 'rb'))
+                feats += list(pickle.load(open(feat_path+'.'+str(suffix), 'rb')))
                 suffix += 1
+        print('finish loading')
 
         orc_bnd   = pickle.load(open(orc_bnd_path, 'rb'))
         phn_label = pickle.load(open(phn_path, 'rb'))
@@ -99,7 +100,7 @@ class PickleDataset(Dataset):
         self.phn2idx        = dict(zip(all_phn, range(len(all_phn))))
         self.idx2phn        = dict(zip(range(len(all_phn)), all_phn))
         self.phn_mapping    = dict([(i, phn_mapping[phn]) for i, phn in enumerate(all_phn)])
-        self.sil_idx = self.phn2idx['SIL']
+        self.sil_idx = self.phn2idx['sil']
 
     def process_feat(self, feats):
         assert len(feats) == self.data_length
