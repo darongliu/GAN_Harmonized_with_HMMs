@@ -2,6 +2,7 @@ import sys
 import pickle
 import numpy as np
 import random
+import os
 
 import torch
 from torch.utils.data import Dataset
@@ -41,7 +42,15 @@ class PickleDataset(Dataset):
 
         self.read_phn_map(phn_map_path)
 
-        feats     = pickle.load(open(feat_path, 'rb'))
+        if os.path.isfile(feat_path):
+            feats = pickle.load(open(feat_path, 'rb'))
+        else:
+            feats = []
+            suffix=1
+            while os.path.isfile(feat_path+'.'+str(suffix)):
+                feats += pickle.load(open(feat_path+'.'+str(suffix), 'rb'))
+                suffix += 1
+
         orc_bnd   = pickle.load(open(orc_bnd_path, 'rb'))
         phn_label = pickle.load(open(phn_path, 'rb'))
         assert (len(feats) == len(orc_bnd) == len(phn_label))
