@@ -50,28 +50,31 @@ class RandomBatchSampler(BatchSampler):
         return len(self.data_source)
 
 
-def get_data_loader(dataset, batch_size, repeat=6, random_batch=True, shuffle=False, drop_last=True):
+def get_data_loader(dataset, batch_size, repeat=6, random_batch=True, shuffle=False, drop_last=True, num_workers=8):
     assert random_batch
     source_collate_fn = partial(_collate_source_fn, repeat=repeat)
     target_collate_fn = _collate_target_fn
     if random_batch:
         source = DataLoader(dataset.source,
                             batch_sampler=RandomBatchSampler(dataset.source, batch_size//2),
-                            collate_fn=source_collate_fn,
-                            num_workers=8)
+                            collate_fn=source_collate_fn, 
+                            num_workers=num_workers)
+                            # num_workers=num_workers, prefetch_factor=(batch_size//num_workers)+1)
         target = DataLoader(dataset.target,
                             batch_sampler=RandomBatchSampler(dataset.target, batch_size*repeat),
                             collate_fn=target_collate_fn,
                             num_workers=8)
     return source, target
 
-def get_dev_data_loader(dataset, batch_size, shuffle=False, drop_last=False):
+def get_dev_data_loader(dataset, batch_size, shuffle=False, drop_last=False, num_workers=8):
     _collate_dev_fn = partial(_collate_sup_fn, padding_label=-100)
     loader = DataLoader(dataset.dev, batch_size=batch_size, collate_fn=_collate_dev_fn,
-                        shuffle=shuffle, drop_last=drop_last, num_workers=8)
+                        shuffle=shuffle, drop_last=drop_last, num_workers=num_workers)
+                        # shuffle=shuffle, drop_last=drop_last, num_workers=num_workers, prefetch_factor=(batch_size//num_workers)+1)
     return loader
 
-def get_sup_data_loader(dataset, batch_size, shuffle=True, drop_last=True):
+def get_sup_data_loader(dataset, batch_size, shuffle=True, drop_last=True, num_workers=8):
     loader = DataLoader(dataset.dev, batch_size=batch_size, collate_fn=_collate_sup_fn,
-                        shuffle=shuffle, drop_last=drop_last, num_workers=10)
+                        shuffle=shuffle, drop_last=drop_last, num_workers=num_workers)
+                        # shuffle=shuffle, drop_last=drop_last, num_workers=num_workers, prefetch_factor=(batch_size//num_workers)+1)
     return loader

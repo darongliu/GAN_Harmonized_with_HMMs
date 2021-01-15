@@ -14,6 +14,7 @@ cp $gan_config $DATA_PATH/save/${prefix}/gan_config.yaml
 
 python3 main.py --mode train --cuda_id 0 \
                --bnd_type $bnd_type --iteration $iteration \
+               --num_workers $jobs \
                --setting $setting \
                --data_dir $DATA_PATH \
                --save_dir $DATA_PATH/save/${prefix} \

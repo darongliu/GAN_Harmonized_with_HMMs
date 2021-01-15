@@ -26,6 +26,7 @@ def addParser():
     parser.add_argument('--bnd_type',       type=str, default='orc', help='')
     parser.add_argument('--setting',        type=str, default='match', help='')
     parser.add_argument('--iteration',      type=int, default=1, help='')
+    parser.add_argument('--num_workers',    type=int, default=8, help='')
     parser.add_argument('--aug',            action='store_true', help='')
     parser.add_argument('--data_dir',       type=str, default=f'/home/r06942045/myProjects/GAN_Harmonized_with_HMMs/data') 
     parser.add_argument('--save_dir',       type=str, default=f'/home/r06942045/myProjects/GAN_Harmonized_with_HMMs/data/save/test_model') 
@@ -156,6 +157,7 @@ if __name__ == "__main__":
     config.mfcc_dim = train_data_set.feat_dim
     config.save_path = f'{args.save_dir}/model'
     config.load_path = f'{config.save_path}/{args.load_ckpt}'
+    config.num_workers = args.num_workers
 
 
     ######################################################################

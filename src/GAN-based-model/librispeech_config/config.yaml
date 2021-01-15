@@ -13,7 +13,7 @@ test_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
 
 # Model
 # generator
-gen_hidden_size: 512
+gen_hidden_size: 1024
 # others
 seg_loss_ratio: 5.
 penalty_ratio: 10
@@ -46,8 +46,8 @@ weak_cnn:
   use_second_conv: True
 
 # Data loader
-phn_max_length: 150 # try 200
-feat_max_length: 1300 # try 2000
+phn_max_length: 150
+feat_max_length: 1300
 concat_window: 11
 sample_var: 0.15
 repeat: 10 # repeat every sample x times
