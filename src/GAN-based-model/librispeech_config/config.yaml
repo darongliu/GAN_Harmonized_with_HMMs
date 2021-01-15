@@ -13,7 +13,7 @@ test_phn_path: 'timit_for_GAN/audio/timit-test-phn.pkl'
 
 # Model
 # generator
-gen_hidden_size: 512
+gen_hidden_size: 1024
 # others
 seg_loss_ratio: 5.
 penalty_ratio: 10

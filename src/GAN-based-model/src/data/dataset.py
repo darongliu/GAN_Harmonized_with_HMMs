@@ -43,8 +43,13 @@ class PickleDataset(Dataset):
         self.read_phn_map(phn_map_path)
 
         if os.path.isfile(feat_path):
+            print('load all features')
             feats = pickle.load(open(feat_path, 'rb'))
+        elif os.path.isdir(feat_path):
+            print('only load path')
+            feats = [os.path.join(feat_path, str(i)+'.pkl') for i in range(len(os.listdir(feat_path)))]
         else:
+            print('load from multiple files')
             feats = []
             suffix=1
             while os.path.isfile(feat_path+'.'+str(suffix)):
@@ -104,8 +109,12 @@ class PickleDataset(Dataset):
 
     def process_feat(self, feats):
         assert len(feats) == self.data_length
-        self.feat_dim = feats[0].shape[-1]
-        self.feats = [feats[i][:self.feat_max_length] for i in range(len(feats))]
+        if type(feats[0]) is str:
+            self.feat_dim = pickle.load(open(feats[0], 'rb')).shape[-1]
+        else:
+            self.feat_dim = feats[0].shape[-1]
+        self.feats = feats
+        # self.feats = [feats[i][:self.feat_max_length] for i in range(len(feats))]
         '''
         self.feats = []
         for feat in tqdm(feats):
@@ -164,9 +173,10 @@ class PickleDataset(Dataset):
                                         self.train_bnd,
                                         self.train_bnd_range,
                                         self.train_seq_length, 
-                                        self.concat_window)
+                                        self.concat_window, 
+                                        self.feat_max_length)
             self.target = TargetDataset(self.target_data, self.sil_idx, augment_prob=self.target_augment_prob)
-        self.dev = DevDataset(self.feats, self.frame_labels, self.concat_window)
+        self.dev = DevDataset(self.feats, self.frame_labels, self.concat_window, self.feat_max_length)
 
     def print_parameter(self, target=False):
         print ('Data Loader Parameter:')
@@ -212,13 +222,14 @@ class TargetDataset(Dataset):
         return torch.tensor(new_seq)
 
 class SourceDataset(Dataset):
-    def __init__(self, feats, train_bnd, train_bnd_range, train_seq_length, concat_window):
+    def __init__(self, feats, train_bnd, train_bnd_range, train_seq_length, concat_window, feat_max_length):
         self.feats = feats
         self.train_bnd = train_bnd
         self.train_bnd_range = train_bnd_range
         self.train_seq_length = train_seq_length
         assert len(feats) == len(train_bnd) == len(train_bnd_range) == len(train_seq_length)
         self.concat_window = concat_window
+        self.feat_max_length = feat_max_length
 
     def concat(self, feat):
         origin_length = len(feat)
@@ -228,11 +239,18 @@ class SourceDataset(Dataset):
         feature = torch.cat([torch.tensor(_feat_[l : l+origin_length]) for l in range(self.concat_window)], axis=-1)
         return feature
 
+    def load(self, f):
+        if type(f) is str:
+            return pickle.load(open(f, 'rb'))[:self.feat_max_length]
+        else:
+            return f[:self.feat_max_length]
+
     def __len__(self):
         return len(self.feats)
 
     def __getitem__(self, index):
-        feat = self.concat(self.feats[index])
+        feat = self.load(self.feats[index])
+        feat = self.concat(feat)
         train_bnd = self.train_bnd[index]
         train_bnd_range = self.train_bnd_range[index]
         train_seq_length = self.train_seq_length[index]
@@ -240,11 +258,12 @@ class SourceDataset(Dataset):
 
 
 class DevDataset(Dataset):
-    def __init__(self, feats, frame_labels, concat_window):
+    def __init__(self, feats, frame_labels, concat_window, feat_max_length):
         self.feats = feats
         self.frame_labels = frame_labels
         assert len(feats) == len(frame_labels)
         self.concat_window = concat_window
+        self.feat_max_length = feat_max_length
     
     def concat(self, feat):
         origin_length = len(feat)
@@ -254,10 +273,17 @@ class DevDataset(Dataset):
         feature = torch.cat([torch.tensor(_feat_[l : l+origin_length]) for l in range(self.concat_window)], axis=-1)
         return feature
 
+    def load(self, f):
+        if type(f) is str:
+            return pickle.load(open(f, 'rb'))[:self.feat_max_length]
+        else:
+            return f[:self.feat_max_length]
+
     def __len__(self):
         return len(self.feats)
 
     def __getitem__(self, index):
-        feat = self.concat(self.feats[index])
+        feat = self.load(self.feats[index])
+        feat = self.concat(feat)
         frame_label = self.frame_labels[index]
         return feat, frame_label

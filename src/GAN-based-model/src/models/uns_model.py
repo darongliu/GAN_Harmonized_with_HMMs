@@ -112,7 +112,7 @@ class UnsModel(nn.Module):
         #
         train_source, train_target = get_data_loader(train_data_set,
                                                      batch_size=self.config.batch_size,
-                                                     repeat=self.config.repeat)
+                                                     repeat=self.config.repeat, num_workers=self.config.num_workers)
         train_source, train_target = iter(train_source), iter(train_target)
 
         gen_loss, dis_loss, seg_loss, gp_loss = 0, 0, 0, 0
@@ -206,7 +206,7 @@ class UnsModel(nn.Module):
         print ('='*80)
 
     def dev(self, dev_data_set):
-        dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
+        dev_source = get_dev_data_loader(dev_data_set, batch_size=self.config.batch_size, num_workers=self.config.num_workers) 
         self.gen_model.eval()
         fers, fnums = 0, 0
         for feat, frame_label, length in dev_source:
@@ -225,7 +225,7 @@ class UnsModel(nn.Module):
         return step_fer
 
     def test(self, dev_data_set, file_path, fer_result_path=''):
-        dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
+        dev_source = get_dev_data_loader(dev_data_set, batch_size=self.config.batch_size, num_workers=self.config.num_workers) 
         self.gen_model.eval()
         fers, fnums = 0, 0
         fers_39, fnums_39 = 0, 0
@@ -288,7 +288,7 @@ class UnsModel(nn.Module):
     def test_posterior(self, dev_data_set, file_path):
         # do not output or write anything
         # used to calc fer, per for already generated posterior
-        dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
+        dev_source = get_dev_data_loader(dev_data_set, batch_size=self.config.batch_size, num_workers=self.config.num_workers) 
         fers, fnums = 0, 0
         fers_39, fnums_39 = 0, 0
         pers_39, pnums_39 = 0, 0
