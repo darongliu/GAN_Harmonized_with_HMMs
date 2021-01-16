@@ -123,7 +123,7 @@ class UnsModel(nn.Module):
         self.gen_model.train()
         self.dis_model.train()
 
-        t = trange(self.config.step)
+        t = trange(self.config.step, dynamic_ncols=True)
         for step in t:
             self.step += 1
             #if self.step == 8000: fram_temp = 0.8

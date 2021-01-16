@@ -22,6 +22,17 @@ python3 main.py --mode train --cuda_id 0 \
                --prefix $prefix \
                --overall_prefix $overall_prefix
 
+# python3 main.py --mode load --cuda_id 0 \
+#                --bnd_type $bnd_type --iteration $iteration \
+#                --num_workers $jobs \
+#                --setting $setting \
+#                --data_dir $DATA_PATH \
+#                --save_dir $DATA_PATH/save/${prefix} \
+#                --load_ckpt ckpt_9000.pth \
+#                --config $gan_config \
+#                --prefix $prefix \
+#                --overall_prefix $overall_prefix
+
 #python3 main.py --mode test --cuda_id 0 \
                #--bnd_type $bnd_type --iteration $iteration \
                #--setting $setting \

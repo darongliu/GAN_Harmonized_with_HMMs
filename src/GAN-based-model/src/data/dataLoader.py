@@ -18,6 +18,8 @@ def _collate_source_fn(l, repeat=6):
     random_pick = torch.clamp(torch.randn_like(bnds) * 0.2 + 0.5, 0, 1)
     sample_frame = torch.round(bnds + random_pick * bnd_ranges).long()
     sample_source = feats[torch.arange(batch_size * 2 * repeat).reshape(-1, 1), sample_frame]
+    #sample_source = torch.gather(feats, 1, sample_frame.unsqueeze(-1).expand(-1,-1,feats.shape[-1]))
+    del feats
     intra_diff_num = (sample_frame[:batch_size * repeat] != sample_frame[batch_size * repeat:]).sum(1).int()
     return sample_source, seq_lengths, intra_diff_num 
 
