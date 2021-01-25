@@ -131,8 +131,8 @@ class UnsModel(nn.Module):
 
             for _ in range(self.config.dis_iter):
                 self.dis_optim.zero_grad()
-                sample_feat, sample_len, intra_diff_num = next(train_source)
-                target_idx, target_len = next(train_target)
+                sample_feat, sample_len, intra_diff_num = [a.to(device) for a in next(train_source)]
+                target_idx, target_len = [a.to(device) for a in next(train_target)]
 
                 dis_loss, gp_loss = self.forward(sample_feat, sample_len,
                                                  target_idx, target_len,
@@ -153,8 +153,8 @@ class UnsModel(nn.Module):
 
             for _ in range(self.config.gen_iter):
                 self.gen_optim.zero_grad()
-                sample_feat, sample_len, intra_diff_num = next(train_source)
-                target_idx, target_len = next(train_target)
+                sample_feat, sample_len, intra_diff_num = [a.to(device) for a in next(train_source)]
+                target_idx, target_len = [a.to(device) for a in next(train_target)]
 
                 gen_loss, seg_loss, fake_sample = self.forward(sample_feat, sample_len,
                                                                target_idx, target_len,
