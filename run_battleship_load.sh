@@ -7,6 +7,7 @@
 gan_config=$(readlink -m $1)
 overall_prefix=$2
 ckpt=$3
+bnd_description=$4
 
 if [ $bnd_type == orc ]; then
   total_iter=1
@@ -20,7 +21,7 @@ fi
 ### Training Process
 for iteration in $(seq 1 $total_iter); do
   ### train GAN model
-  hrun -G -c $jobs -m 32 bash -c '. ./cmd.sh; . ./path.sh; . ./config_battleship.sh; cd src; bash train_GAN_load.sh '$iteration' '$gan_config' '$overall_prefix' '$ckpt  || exit 1
+  hrun -G -c $jobs -m 32 bash -c '. ./cmd.sh; . ./path.sh; . ./config_battleship.sh; cd src; bash train_GAN_load.sh '$iteration' '$gan_config' '$overall_prefix' '$ckpt' '$bnd_description  || exit 1
 
   ### wfst decoder
   # hrun -c $jobs -m 64   bash -c '. ./cmd.sh; . ./path.sh; . ./config_battleship.sh; cd src; bash train_wfst.sh '$iteration' '$overall_prefix || exit 1

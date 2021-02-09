@@ -34,6 +34,7 @@ def addParser():
     parser.add_argument('--config',         type=str, default=f'/home/r06942045/myProjects/GAN_Harmonized_with_HMMs/src/GAN-based-model/config.yaml') 
     parser.add_argument('--prefix',         type=str, default=f'', help='used for output fer result') 
     parser.add_argument('--overall_prefix',         type=str, default=f'', help='used for read correct bnd') 
+    parser.add_argument('--bnd_description',        type=str, default=f'', help='used for read correct bnd') 
     return parser
 
 def print_bar():
@@ -73,6 +74,7 @@ def print_training_parameter(args, config):
         print (f'   config_path:            {args.config}')
         print (f'   prefix:                 {args.prefix}')
         print (f'   overall prefix:                 {args.overall_prefix}')
+        print (f'   bnd description:                 {args.bnd_description}')
     print_bar()     
 
 
@@ -88,10 +90,16 @@ if __name__ == "__main__":
     os.environ['CUDA_VISIBLE_DEVICES'] = args.cuda_id
 
     if args.iteration == 1:
-        train_bnd_path    = f'{args.data_dir}/timit_for_GAN/audio/timit-train-{args.bnd_type}{args.iteration}-bnd.pkl'
+        if args.bnd_description.strip() == '':
+            train_bnd_path    = f'{args.data_dir}/timit_for_GAN/audio/timit-train-{args.bnd_type}{args.iteration}-bnd.pkl'
+        else:
+            train_bnd_path    = f'{args.data_dir}/timit_for_GAN/audio/timit-train-{args.bnd_description}-{args.bnd_type}{args.iteration}-bnd.pkl'
     else:
         train_bnd_path    = f'{args.data_dir}/timit_for_GAN/audio/{args.overall_prefix}timit-train-{args.bnd_type}{args.iteration}-bnd.pkl'
-    test_bnd_path     = f'{args.data_dir}/timit_for_GAN/audio/timit-test-{args.bnd_type}{args.iteration}-bnd.pkl'
+    if args.bnd_description.strip() == '':
+        test_bnd_path     = f'{args.data_dir}/timit_for_GAN/audio/timit-test-{args.bnd_type}{args.iteration}-bnd.pkl'
+    else:
+        test_bnd_path     = f'{args.data_dir}/timit_for_GAN/audio/timit-test-{args.bnd_description}-{args.bnd_type}{args.iteration}-bnd.pkl'
     output_path       = f'{args.save_dir}/train.pkl'
     phn_map_path      = f'{args.data_dir}/phones.60-48-39.map.txt'
 
