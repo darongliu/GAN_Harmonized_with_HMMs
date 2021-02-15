@@ -56,9 +56,9 @@ class Decoder():
             self._write_trans(trans)
         else:
             scoring_cmd = 'true'
-
+    
         os.system('%s/scripts/decode.sh --cmd run.pl --skip_scoring %s --nj %s %s %s %s | tee %s/decode.log || exit 1;' % ( os.getcwd(), scoring_cmd, self.nj, self.graph_dir, self.posterior_dir, self.decode_dir, self.decode_dir))
-        
+
         # Get best WER and print it
         # get penalty
         best_wer_path = os.path.join(self.decode_dir,'scoring_kaldi/best_wer')
@@ -83,11 +83,7 @@ class Decoder():
         #             N : number of utterance
         #             L : maximum number of frames of one utterance
         #             P : dimension of original phone posterior 
-        N,L,P = likelihood.shape
-        output = np.zeros((N,L,P))
-        output[:,:,:P] = likelihood
-        output = output[:,:,trans_array]
-        return output 
+        return likelihood[:,:,trans_array]
         
     def _gen_utt2spk(self, N):
         # Input : 
