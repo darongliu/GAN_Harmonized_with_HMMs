@@ -137,7 +137,7 @@ if __name__ == "__main__":
                                        os.path.join(args.data_dir, config.train_feat_path),
                                        os.path.join(args.data_dir, config.train_phn_path),
                                        os.path.join(args.data_dir, config.train_orc_bnd_path),
-                                       train_bnd_path=train_bnd_path if args.mode == 'test_posterior' else None, 
+                                       train_bnd_path=train_bnd_path if args.mode == 'test_reduce' else None, 
                                        phn_map_path=phn_map_path,
                                        name='DATA LOADER(evaluation train)',
                                        mode='dev')
@@ -145,7 +145,7 @@ if __name__ == "__main__":
                                      os.path.join(args.data_dir, config.test_feat_path),
                                      os.path.join(args.data_dir, config.test_phn_path),
                                      os.path.join(args.data_dir, config.test_orc_bnd_path),
-                                     train_bnd_path=test_bnd_path if args.mode == 'test_posterior' else None, 
+                                     train_bnd_path=test_bnd_path if args.mode == 'test_reduce' else None, 
                                      phn_map_path=phn_map_path,
                                      name='DATA LOADER(evaluation test)',
                                      mode='dev')
@@ -199,7 +199,18 @@ if __name__ == "__main__":
         g.test(train_data_set, f'{args.save_dir}/train.pkl')
         g.test(test_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
 
-    elif args.mode == 'test_posterior':
-        g.test_posterior(train_data_set, f'{args.save_dir}/train.pkl')
-        g.test_posterior(test_data_set, f'{args.save_dir}/test.pkl') # fer is report on dev set
+    elif args.mode == 'test_reduce':
+        g.test_reduce(train_data_set, \
+                      f'{args.save_dir}/train_origin.pkl', \
+                      f'{args.save_dir}/train_reduce.pkl', \
+                      f'{args.save_dir}/train_reduce_length.pkl', \
+                      f'{args.save_dir}/train_extend.pkl')
 
+        g.test_reduce(test_data_set, \
+                      f'{args.save_dir}/test_origin.pkl', \
+                      f'{args.save_dir}/test_reduce.pkl', \
+                      f'{args.save_dir}/test_reduce_length.pkl', \
+                      f'{args.save_dir}/test_extend.pkl')
+                    
+        # g.test_posterior(train_data_set, f'{args.save_dir}/train.pkl')
+        # g.test_posterior(test_data_set, f'{args.save_dir}/test.pkl') # fer is report on dev set

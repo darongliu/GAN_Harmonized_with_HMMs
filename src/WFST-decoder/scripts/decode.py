@@ -46,6 +46,7 @@ class Decoder():
         for idx,(output, l) in enumerate(zip(likelihood, lengths)):
             output = output[:l,:]
             output = np.where(output == 0, np.finfo(float).eps, output)
+            output = np.where(np.isnan(output), np.finfo(float).eps, output)
             output = np.ascontiguousarray(output, dtype=np.float32)
             writer.write_next_utt(str(self._number2str(idx, n_digits)).encode('utf-8'), np.log(output))
         writer.close()
@@ -160,9 +161,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     save_dir      = f'{args.data_path}/save/{args.prefix}'
-    lengths       = pkl.load(open(f'{args.data_path}/timit_for_GAN/audio/timit-{args.set_type}-length.pkl', 'rb'))
     transcription = pkl.load(open(f'{args.data_path}/timit_for_GAN/audio/timit-{args.set_type}-phn.pkl', 'rb'))
     likelihood    = pkl.load(open(f'{save_dir}/{args.set_type}.pkl', 'rb'))
+    if os.path.isfile(f'{save_dir}/{args.set_type}-length.pkl'):
+        print('use local length pkl')
+        lengths   = pkl.load(open(f'{save_dir}/{args.set_type}-length.pkl', 'rb'))
+    else:
+        lengths   = pkl.load(open(f'{args.data_path}/timit_for_GAN/audio/timit-{args.set_type}-length.pkl', 'rb'))
     
     # Experiment dir
     graph_dir     = f'{args.data_path}/wfst_data/{args.lm_type}/tree_sp0.95/graph_9gram'

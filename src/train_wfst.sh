@@ -1,7 +1,7 @@
 #!/bin/bash
 iteration=$1
 overall_prefix=$2
-
+mode=${3:-train}
 prefix=${overall_prefix}${bnd_type}_iter${iteration}_${setting}_gan
 
 # WFST decode the phoneme sequences
@@ -9,9 +9,11 @@ cd WFST-decoder
 python3 scripts/decode.py --set_type test --lm_type $setting \
                          --data_path $DATA_PATH --prefix $prefix \
                          --jobs $jobs
+if [ $mode = 'train' ]; then
 python3 scripts/decode.py --set_type train --lm_type $setting \
                          --data_path $DATA_PATH --prefix $prefix \
                          --jobs $jobs
+fi
 cd ../
 
 # Evalution

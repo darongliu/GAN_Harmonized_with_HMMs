@@ -280,7 +280,7 @@ class UnsModel(nn.Module):
         print(np.array(probs).shape)
         pk.dump(np.array(probs), open(file_path, 'wb'))
 
-    def test_posterior(self, dev_data_set, file_path):
+    def test_reduce(self, dev_data_set, origin_posterior_path, file_path, length_path, extend_file_path, fer_result_path=''):
         # do not output or write anything
         # used to calc fer, per for already generated posterior
         dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
@@ -289,18 +289,21 @@ class UnsModel(nn.Module):
         pers_39, pnums_39 = 0, 0
         pers_39_segment_wise_generation, pnums_39_segment_wise_generation = 0, 0
 
-        all_probs = pk.load(open(file_path, 'rb'))
+        all_probs = pk.load(open(origin_posterior_path, 'rb'))
 
         # calc all phn 39 and give index
         all_p39 = list(set(dev_data_set.phn_mapping.values()))
         phn392idx = dict(zip(all_p39, range(len(all_p39))))
 
         count = 0
+        all_reduce_probs = np.zeros_like(all_probs)
+        all_reduce_length = []
+        all_extend_reduce_probs = np.array(all_probs)
         for _, frame_label, length in dev_source:
             prob = all_probs[count:count+len(length)]
             train_bnd = dev_data_set.train_bnd[count:count+len(length)]
             train_bnd_range = dev_data_set.train_bnd_range[count:count+len(length)]
-            count += len(length)
+            
             pred = prob.argmax(-1)
             frame_label = frame_label.numpy()
             frame_error, frame_num, _ = frame_eval(pred, frame_label, length)
@@ -328,19 +331,26 @@ class UnsModel(nn.Module):
             pred_39_segment_wise_generation = np.zeros_like(pred)
             l, w  = frame_label.shape
             for i in range(l):
+                reduce_length = 0
                 for j in range(len(train_bnd[i])):
-                    acc_post = prob[i][train_bnd[i][j]:train_bnd[i][j]+train_bnd_range[i][j]].sum(0)
+                    acc_post = prob[i][train_bnd[i][j]:train_bnd[i][j]+train_bnd_range[i][j]].mean(0)
+                    all_reduce_probs[count+i][j] = acc_post
+                    reduce_length += 1
+                    all_extend_reduce_probs[count+i][train_bnd[i][j]:train_bnd[i][j]+train_bnd_range[i][j]] = acc_post
                     pred_39_segment = phn392idx[dev_data_set.phn_mapping[acc_post.argmax(-1)]]
                     pred_39_segment_wise_generation[i, train_bnd[i][j]:train_bnd[i][j]+train_bnd_range[i][j]] = pred_39_segment 
+                all_reduce_length.append(reduce_length)
 
             phone_error_39_segment_wise_generation, phone_num_39_segment_wise_generation, _ = per_eval(pred_39_segment_wise_generation, frame_label_39, length)
-
             fers_39 += frame_error_39
             fnums_39 += frame_num_39
             pers_39 += phone_error_39
             pnums_39 += phone_num_39
             pers_39_segment_wise_generation += phone_error_39_segment_wise_generation
             pnums_39_segment_wise_generation += phone_num_39_segment_wise_generation
+
+            count += len(length)
+
         step_fer = fers / fnums * 100
         step_fer_39 = fers_39 / fnums_39 * 100
         step_per_39 = pers_39 / pnums_39 * 100
@@ -349,6 +359,11 @@ class UnsModel(nn.Module):
         print('fer on phn 39: ', step_fer_39)
         print('per on phn 39: ', step_per_39)
         print('segment wise per on phn 39: ', step_per_39_segment_wise_generation)
+
+        all_reduce_length = np.array(all_reduce_length)
+        pk.dump(np.array(all_reduce_probs), open(file_path, 'wb'))
+        pk.dump(np.array(all_reduce_length), open(length_path, 'wb'))
+        pk.dump(np.array(all_extend_reduce_probs), open(extend_file_path, 'wb'))
 
     def save_ckpt(self):
         ckpt_path = os.path.join(self.config.save_path, "ckpt_{}.pth".format(self.step))
