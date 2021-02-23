@@ -113,6 +113,11 @@ class UnsModel(nn.Module):
     def train(self, train_data_set, dev_data_set=None, aug=False):
         print ('TRAINING(unsupervised)...')
         self.log_writer = SummaryWriter(self.config.save_path)
+        self.dev_fer_path = os.path.join(self.config.save_path, 'dev_fer.pk')
+        if os.path.isfile(self.dev_fer_path):
+            self.dev_fer = pk.load(open(self.dev_fer_path, 'rb'))
+        else:
+            self.dev_fer = {}
 
         ######################################################################
         # Build dataloader
@@ -205,6 +210,8 @@ class UnsModel(nn.Module):
                 tqdm.write(f'EVAL max: {max_fer:.2f} step: {step_fer:.2f}')
 
                 self.write_log('dev_acc', {"fer": step_fer})
+                self.dev_fer[self.step] = step_fer
+                pk.dump(self.dev_fer, open(self.dev_fer_path, 'wb'))
 
                 if step_fer < max_fer: 
                     max_fer = step_fer
