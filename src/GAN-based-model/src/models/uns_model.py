@@ -139,7 +139,7 @@ class UnsModel(nn.Module):
 
             for _ in range(self.config.dis_iter):
                 self.dis_optim.zero_grad()
-                feats, seq_lengths, intra_diff_num, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight = [a.to(device) for a in next(train_source)]
+                feats, seq_lengths, intra_diff_num, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight = [a.to(device) if a is not None else None for a in next(train_source)]
                 target_idx, target_len = [a.to(device) for a in next(train_target)]
 
                 dis_loss, gp_loss = self.forward(feats, seq_lengths, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight, 
@@ -161,7 +161,7 @@ class UnsModel(nn.Module):
 
             for _ in range(self.config.gen_iter):
                 self.gen_optim.zero_grad()
-                feats, seq_lengths, intra_diff_num, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight = [a.to(device) for a in next(train_source)]
+                feats, seq_lengths, intra_diff_num, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight = [a.to(device) if a is not None else None for a in next(train_source)]
                 target_idx, target_len = [a.to(device) for a in next(train_target)]
 
                 gen_loss, seg_loss, fake_sample = self.forward(feats, seq_lengths, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight, 
@@ -203,6 +203,9 @@ class UnsModel(nn.Module):
             if self.step % self.config.eval_step == 0:
                 step_fer = self.dev(dev_data_set)
                 tqdm.write(f'EVAL max: {max_fer:.2f} step: {step_fer:.2f}')
+
+                self.write_log('dev_acc', {"fer": step_fer})
+
                 if step_fer < max_fer: 
                     max_fer = step_fer
                     self.save_ckpt()
