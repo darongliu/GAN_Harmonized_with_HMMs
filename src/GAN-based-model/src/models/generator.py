@@ -18,11 +18,7 @@ class Frame2Phn(nn.Module):
         self.model = MLP(input_size, output_size, hidden)
         self.softmax = nn.Softmax(-1)
 
-    def sample_noise(self, x, eps=1e-20):
-        U = torch.rand_like(x)
-        return -torch.log(-torch.log(U + eps) + eps)
-
-    def forward(self, x, temp=1, mask_len=None):
+    def forward(self, x):
         """
         Inputs: sampled features
             x: (batch, timesteps, feature_size)
@@ -34,19 +30,7 @@ class Frame2Phn(nn.Module):
         output = self.model(x)
         prob = self.softmax(output) # no gumbel
 
-        gumbel_output = output + self.sample_noise(output)
-        soft_prob = self.softmax(gumbel_output / temp)
-
-        hard_prob = torch.nn.functional.one_hot(torch.max(soft_prob, dim=-1)[-1], soft_prob.shape[-1])
-        hard_prob = hard_prob.cuda().float()
-        hard_prob = (hard_prob - soft_prob).detach() + soft_prob
-
-        if mask_len is not None:
-            prob = masked_out(prob, mask_len)
-            soft_prob = masked_out(soft_prob, mask_len)
-            hard_prob = masked_out(hard_prob, mask_len)
-
-        return prob, soft_prob, hard_prob
+        return prob
 
     def calc_seq_loss(self, x, y):
         x = x[:, :y.size(1)]

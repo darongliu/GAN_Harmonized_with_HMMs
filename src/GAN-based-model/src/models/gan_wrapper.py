@@ -7,6 +7,7 @@ from src.models.lstm_discriminator import LSTMDiscriminator
 from src.models.transformer_discriminator import TransformerDiscriminator
 from src.models.generator import Frame2Phn
 from src.lib.utils import pad_sequence
+from src.lib.utils import masked_out
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -120,6 +121,46 @@ class GenWrapper(nn.Module):
                 nn.init.xavier_uniform_(para.data)
             elif 'bias' in name:
                 nn.init.zeros_(para.data)
+
+    def sample_prob(self, prob, sample_frame):
+        origin_b = prob.shape[0]
+        sample_b = sample_frame.shape[0]
+        assert sample_b % origin_b == 0
+        repeat = sample_b//origin_b
+        return prob.repeat(repeat, 1, 1)[torch.arange(sample_b).reshape(-1, 1), sample_frame]
+
+    def repeat_seq_length(self, seq_lengths, sample_frame):
+        origin_b = seq_lengths.shape[0]
+        sample_b = sample_frame.shape[0]
+        assert sample_b % origin_b == 0
+        repeat = sample_b//origin_b
+        return seq_lengths.repeat(repeat)
+
+    def avg_prob(self, prob, all_seq_bnd_idx, all_seq_bnd_weight):
+        prob = prob*all_seq_bnd_weight.unsqueeze(-1)
+        output = prob.new_zeros(prob.shape[0], torch.max(all_seq_bnd_idx)+1, prob.shape[-1])
+        output.scatter_add_(1, all_seq_bnd_idx.unsqueeze(-1).expand(-1, -1, prob.shape[-1]), prob)
+        return output
+
+    def gumbel(self, prob, temp=1, mask_len=None):
+
+        def sample_noise(x, eps=1e-20):
+            U = torch.rand_like(x)
+            return -torch.log(-torch.log(U + eps) + eps)
+
+        gumbel_output = torch.log(prob+1e-10) + sample_noise(prob)
+        soft_prob = F.softmax(gumbel_output / temp, dim=-1)
+
+        hard_prob = torch.nn.functional.one_hot(torch.max(soft_prob, dim=-1)[-1], soft_prob.shape[-1])
+        hard_prob = hard_prob.cuda().float()
+        hard_prob = (hard_prob - soft_prob).detach() + soft_prob
+
+        if mask_len is not None:
+            prob = masked_out(prob, mask_len)
+            soft_prob = masked_out(soft_prob, mask_len)
+            hard_prob = masked_out(hard_prob, mask_len)
+
+        return prob, soft_prob, hard_prob
 
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
