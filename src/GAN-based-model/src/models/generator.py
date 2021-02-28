@@ -64,7 +64,7 @@ class Frame2PhnLSTM(nn.Module):
         c0 = x.new_zeros(self.num_layers, batch_size, self.hidden)
         x = torch.nn.utils.rnn.pack_padded_sequence(x, mask_len.cpu(), batch_first=True)
         output, (h_n, c_n) = self.lstm(x, (h0, c0))
-        output = h_n[:, -1, :] # [B x hidden]
+        output = h_n[-1, :, :] # [B x hidden]
         output = self.output(output)
         prob = self.softmax(output) # no gumbel
         return prob
