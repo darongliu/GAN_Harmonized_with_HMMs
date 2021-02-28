@@ -32,7 +32,8 @@ class UnsModel(nn.Module):
 
         self.gen_model = GenWrapper(config.feat_dim,
                                     config.phn_size,
-                                    config.gen_hidden_size).to(device)
+                                    config.gen_hidden_size,
+                                    config.gen_num_layers).to(device)
         model_type = config['model_type']
         max_len = config.phn_max_length if config.use_maxlen else None
         self.dis_model = DisWrapper(phn_size=config.phn_size,
@@ -61,28 +62,15 @@ class UnsModel(nn.Module):
         sys.stdout.write(cout_word+'\n')
         sys.stdout.flush()
 
-    def forward(self, feats, seq_lengths, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight, target_idx, target_len, frame_temp,
-                intra_diff_num=None):
-        origin_prob = self.gen_model(feats)
+    def forward(self, feats, feats_segment_len, recover_idx_0, recover_idx_1, seq_lengths, \
+                target_idx, target_len, frame_temp, \
+                train_generator=False):
+        prob_frame = self.gen_model(feats, feats_segment_len)
         
         # reduce by sample
-        reduce_prob = self.gen_model.sample_prob(origin_prob, sample_frame)
-        repeated_seq_lengths = self.gen_model.repeat_seq_length(seq_lengths, sample_frame)
-        prob, soft_prob, hard_prob = self.gen_model.gumbel(reduce_prob, frame_temp, repeated_seq_lengths)
+        prob_reorg = self.gen_model.reorg(prob_frame, recover_idx_0, recover_idx_1)
+        prob, soft_prob, hard_prob = self.gen_model.gumbel(prob_reorg, frame_temp, seq_lengths)
 
-        if self.config.intra_gumbel == 'soft':
-            intra_sample = soft_prob
-        elif self.config.intra_gumbel == 'hard':
-            intra_sample = hard_prob
-        else:
-            intra_sample = prob
-
-        if self.config.reduce_type == 'avg':
-            reduce_prob = self.gen_model.avg_prob(origin_prob, all_seq_bnd_idx, all_seq_bnd_weight)
-            prob, soft_prob, hard_prob = self.gen_model.gumbel(reduce_prob, frame_temp, seq_lengths)
-        else:
-            seq_lengths = repeated_seq_lengths
-            
         if self.config.gan_gumbel == 'soft':
             fake_sample = soft_prob
         elif self.config.gan_gumbel == 'hard':
@@ -92,17 +80,12 @@ class UnsModel(nn.Module):
 
         real_sample = gen_real_sample(target_idx, target_len, self.config.phn_size).to(device)
 
-        if intra_diff_num is not None:
+        if train_generator:
             # generator
-            batch_size = intra_sample.size(0) // 2
-            intra_diff_num = intra_diff_num.to(device)
 
             g_loss = self.dis_model.calc_g_loss(real_sample, target_len,
                                                 fake_sample, seq_lengths)
-            seg_loss = self.gen_model.calc_intra_loss(intra_sample[:batch_size],
-                                                      intra_sample[batch_size:],
-                                                      intra_diff_num)
-            return g_loss + self.config.seg_loss_ratio*seg_loss, seg_loss, fake_sample
+            return g_loss, fake_sample
 
         else:
             # discriminator
@@ -123,13 +106,11 @@ class UnsModel(nn.Module):
         # Build dataloader
         #
         train_source, train_target = get_data_loader(train_data_set,
-                                                     batch_size=self.config.batch_size,
-                                                     repeat=self.config.repeat,
-                                                     use_avg=True if self.config.reduce_type=='avg' else False)
+                                                     batch_size=self.config.batch_size)
         train_source, train_target = iter(train_source), iter(train_target)
 
-        gen_loss, dis_loss, seg_loss, gp_loss = 0, 0, 0, 0
-        step_gen_loss, step_dis_loss, step_seg_loss, step_gp_loss = 0, 0, 0, 0
+        gen_loss, dis_loss, gp_loss = 0, 0, 0
+        step_gen_loss, step_dis_loss, step_gp_loss = 0, 0, 0
         max_fer = 100.0
         frame_temp = self.config.frame_temp
 
@@ -144,10 +125,10 @@ class UnsModel(nn.Module):
 
             for _ in range(self.config.dis_iter):
                 self.dis_optim.zero_grad()
-                feats, seq_lengths, intra_diff_num, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight = [a.to(device) if a is not None else None for a in next(train_source)]
+                feats, feats_segment_len, recover_idx_0, recover_idx_1, seq_lengths = [a.to(device) for a in next(train_source)]
                 target_idx, target_len = [a.to(device) for a in next(train_target)]
 
-                dis_loss, gp_loss = self.forward(feats, seq_lengths, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight, 
+                dis_loss, gp_loss = self.forward(feats, feats_segment_len, recover_idx_0, recover_idx_1, seq_lengths, 
                                                  target_idx, target_len,
                                                  frame_temp)
                 dis_loss.backward()
@@ -158,49 +139,43 @@ class UnsModel(nn.Module):
                 gp_loss = gp_loss.item()
                 t.set_postfix(dis_loss=f'{dis_loss:.2f}',
                               gp_loss=f'{gp_loss:.2f}',
-                              gen_loss=f'{gen_loss:.2f}',
-                              seg_loss=f'{seg_loss:.5f}')
+                              gen_loss=f'{gen_loss:.2f}')
 
             self.write_log('D_Loss', {"dis_loss": dis_loss,
                                       "gp_loss": gp_loss})
 
             for _ in range(self.config.gen_iter):
                 self.gen_optim.zero_grad()
-                feats, seq_lengths, intra_diff_num, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight = [a.to(device) if a is not None else None for a in next(train_source)]
+                feats, feats_segment_len, recover_idx_0, recover_idx_1, seq_lengths = [a.to(device) for a in next(train_source)]
                 target_idx, target_len = [a.to(device) for a in next(train_target)]
 
-                gen_loss, seg_loss, fake_sample = self.forward(feats, seq_lengths, sample_frame, all_seq_bnd_idx, all_seq_bnd_weight, 
+                gen_loss, fake_sample = self.forward(feats, feats_segment_len, recover_idx_0, recover_idx_1, seq_lengths,  
                                                                target_idx, target_len,
-                                                               frame_temp, intra_diff_num)
+                                                               frame_temp, train_generator=True)
                 gen_loss.backward()
                 g_clip_grad = nn.utils.clip_grad_norm_(self.gen_model.parameters(), 5.0)
                 self.gen_optim.step()
 
                 gen_loss = gen_loss.item()
-                seg_loss = seg_loss.item()
                 t.set_postfix(dis_loss=f'{dis_loss:.2f}',
                               gp_loss=f'{gp_loss:.2f}',
-                              gen_loss=f'{gen_loss:.2f}',
-                              seg_loss=f'{seg_loss:.5f}')
+                              gen_loss=f'{gen_loss:.2f}')
 
-            self.write_log('G_Loss', {"gen_loss": gen_loss,
-                                      'seg_loss': seg_loss})
+            self.write_log('G_Loss', {"gen_loss": gen_loss})
 
             ######################################################################
             # Update & print losses
             #
             step_gen_loss += gen_loss / self.config.print_step
             step_dis_loss += dis_loss / self.config.print_step
-            step_seg_loss += seg_loss / self.config.print_step
             step_gp_loss += gp_loss / self.config.print_step
 
             if self.step % self.config.print_step == 0:
                 tqdm.write(f'Step: {self.step:5d} '+
                            f'dis_loss: {step_dis_loss:.4f} '+
                            f'gp_loss: {step_gp_loss:.4f} '+
-                           f'gen_loss: {step_gen_loss:.4f} '+
-                           f'seg_loss: {step_seg_loss:.4f}')
-                step_gen_loss, step_dis_loss, step_seg_loss, step_gp_loss = 0, 0, 0, 0
+                           f'gen_loss: {step_gen_loss:.4f} ')
+                step_gen_loss, step_dis_loss, step_gp_loss = 0, 0, 0
 
             ######################################################################
             # Evaluation
@@ -220,27 +195,28 @@ class UnsModel(nn.Module):
         print ('='*80)
 
     def dev(self, dev_data_set):
-        dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
+        dev_source = get_dev_data_loader(dev_data_set, batch_size=self.config.batch_size) 
         self.gen_model.eval()
         fers, fnums = 0, 0
-        for feat, frame_label, length in dev_source:
-            origin_prob  = self.gen_model(feat.to(device))
-            prob, soft_prob, hard_prob = self.gen_model.gumbel(origin_prob, mask_len=length)
+        for feats, feats_segment_len, recover_idx_0, recover_idx_1, seq_lengths, feats_labels, _, _  in dev_source:
+            prob_frame = self.gen_model(feats.to(device), feats_segment_len.to(device))
+            prob_reorg = self.gen_model.reorg(prob_frame, recover_idx_0.to(device), recover_idx_1.to(device))
+            prob, soft_prob, hard_prob = self.gen_model.gumbel(prob_reorg, mask_len=seq_lengths)
             if self.config.output_gumbel == 'soft':
                 prob = soft_prob
             elif self.config.output_gumbel == 'hard':
                 prob = hard_prob
             prob = prob.detach().cpu().numpy()
             pred = prob.argmax(-1)
-            frame_label = frame_label.numpy()
-            frame_error, frame_num, _ = frame_eval(pred, frame_label, length)
+            feats_labels = feats_labels.numpy()
+            frame_error, frame_num, _ = frame_eval(pred, feats_labels, seq_lengths)
             fers += frame_error
             fnums += frame_num
         step_fer = fers / fnums * 100
         return step_fer
 
     def test(self, dev_data_set, file_path, fer_result_path=''):
-        dev_source = get_dev_data_loader(dev_data_set, batch_size=256) 
+        dev_source = get_dev_data_loader(dev_data_set, batch_size=self.config.batch_size) 
         self.gen_model.eval()
         fers, fnums = 0, 0
         fers_39, fnums_39 = 0, 0
@@ -250,18 +226,19 @@ class UnsModel(nn.Module):
         all_p39 = list(set(dev_data_set.phn_mapping.values()))
         phn392idx = dict(zip(all_p39, range(len(all_p39))))
 
-        for feat, frame_label, length in dev_source:
-            feat = pad_sequence(feat, max_len=self.config.feat_max_length)
-            origin_prob  = self.gen_model(feat.to(device))
-            prob, soft_prob, hard_prob = self.gen_model.gumbel(origin_prob, mask_len=length)
+        for feats, feats_segment_len, recover_idx_0, recover_idx_1, seq_lengths, feats_labels, origin_lengths, frame_labels in dev_source:
+            prob_frame = self.gen_model(feats.to(device), feats_segment_len.to(device))
+            prob_reorg = self.gen_model.reorg(prob_frame, recover_idx_0.to(device), recover_idx_1.to(device))
+            prob, soft_prob, hard_prob = self.gen_model.gumbel(prob_reorg, mask_len=seq_lengths)
             if self.config.output_gumbel == 'soft':
                 prob = soft_prob
             elif self.config.output_gumbel == 'hard':
                 prob = hard_prob
             prob = prob.detach().cpu().numpy()
             pred = prob.argmax(-1)
-            frame_label = frame_label.numpy()
-            frame_error, frame_num, _ = frame_eval(pred, frame_label, length)
+            feats_labels = feats_labels.numpy()
+            frame_labels = frame_labels.numpy()
+            frame_error, frame_num, _ = frame_eval(pred, feats_labels, seq_lengths)
 
             probs.extend(prob)
             fers += frame_error
@@ -274,14 +251,21 @@ class UnsModel(nn.Module):
                 for j in range(w):
                     pred_39[i][j] = phn392idx[dev_data_set.phn_mapping[pred[i][j]]]
 
-            frame_label_39 = np.zeros_like(frame_label)
-            l, w  = frame_label.shape
+            feats_labels_39 = np.zeros_like(feats_labels)
+            l, w  = feats_labels.shape
             for i in range(l):
                 for j in range(w):
-                    if frame_label[i][j] != -100:
-                        frame_label_39[i][j] = phn392idx[dev_data_set.phn_mapping[frame_label[i][j]]]
-            frame_error_39, frame_num_39, _ = frame_eval(pred_39, frame_label_39, length)
-            phone_error_39, phone_num_39, _ = per_eval(pred_39, frame_label_39, length)
+                    if feats_labels[i][j] != -100:
+                        feats_labels_39[i][j] = phn392idx[dev_data_set.phn_mapping[feats_labels[i][j]]]
+            frame_labels_39 = np.zeros_like(frame_labels)
+            l, w  = frame_labels.shape
+            for i in range(l):
+                for j in range(w):
+                    if frame_labels[i][j] != -100:
+                        frame_labels_39[i][j] = phn392idx[dev_data_set.phn_mapping[frame_labels[i][j]]]
+ 
+            frame_error_39, frame_num_39, _ = frame_eval(pred_39, feats_labels_39, seq_lengths)
+            phone_error_39, phone_num_39, _ = per_eval(pred_39, frame_labels_39, seq_lengths, origin_lengths)
 
             fers_39 += frame_error_39
             fnums_39 += frame_num_39

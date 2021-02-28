@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from src.models.discriminator import WeakDiscriminator, Discriminator
 from src.models.lstm_discriminator import LSTMDiscriminator
 from src.models.transformer_discriminator import TransformerDiscriminator
-from src.models.generator import Frame2Phn
+from src.models.generator import Frame2Phn, Frame2PhnLSTM
 from src.lib.utils import pad_sequence
 from src.lib.utils import masked_out
 
@@ -112,7 +112,7 @@ class GenWrapper(nn.Module):
     """ Input is already sampled repeatedly (2*batch*repeat, ...). """
     def __init__(self, *args, **kwargs):
         super().__init__()
-        self.model = Frame2Phn(*args, **kwargs)
+        self.model = Frame2PhnLSTM(*args, **kwargs)
         self._spec_init()
 
     def _spec_init(self):
@@ -122,24 +122,9 @@ class GenWrapper(nn.Module):
             elif 'bias' in name:
                 nn.init.zeros_(para.data)
 
-    def sample_prob(self, prob, sample_frame):
-        origin_b = prob.shape[0]
-        sample_b = sample_frame.shape[0]
-        assert sample_b % origin_b == 0
-        repeat = sample_b//origin_b
-        return prob.repeat(repeat, 1, 1)[torch.arange(sample_b).reshape(-1, 1), sample_frame]
-
-    def repeat_seq_length(self, seq_lengths, sample_frame):
-        origin_b = seq_lengths.shape[0]
-        sample_b = sample_frame.shape[0]
-        assert sample_b % origin_b == 0
-        repeat = sample_b//origin_b
-        return seq_lengths.repeat(repeat)
-
-    def avg_prob(self, prob, all_seq_bnd_idx, all_seq_bnd_weight):
-        prob = prob*all_seq_bnd_weight.unsqueeze(-1)
-        output = prob.new_zeros(prob.shape[0], torch.max(all_seq_bnd_idx)+1, prob.shape[-1])
-        output.scatter_add_(1, all_seq_bnd_idx.unsqueeze(-1).expand(-1, -1, prob.shape[-1]), prob)
+    def reorg(self, prob_frame, recover_idx_0, recover_idx_1):
+        output = prob_frame.new_zeros(torch.max(recover_idx_0)+1, torch.max(recover_idx_1)+1, prob_frame.shape[-1])
+        output.index_put_(indices=(recover_idx_0, recover_idx_1), values=prob_frame)
         return output
 
     def gumbel(self, prob, temp=1, mask_len=None):

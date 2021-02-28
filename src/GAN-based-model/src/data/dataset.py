@@ -2,6 +2,7 @@ import sys
 import pickle
 import numpy as np
 import random
+from collections import Counter
 
 import torch
 from torch.utils.data import Dataset
@@ -24,7 +25,7 @@ class PickleDataset(Dataset):
                  feat_path,                                 # feat data path
                  phn_path,                                  # phone data path
                  orc_bnd_path,                              # oracle boundary data path
-                 train_bnd_path=None,                       # pretrained boundary data path
+                 train_bnd_path='',                       # pretrained boundary data path
                  target_path=None,                          # text data path
                  data_length=None,                          # num of non-matching data, None would be set to len(feats)
                  phn_map_path='./phones.60-48-39.map.txt',
@@ -43,14 +44,12 @@ class PickleDataset(Dataset):
         feats     = pickle.load(open(feat_path, 'rb'))
         orc_bnd   = pickle.load(open(orc_bnd_path, 'rb'))
         phn_label = pickle.load(open(phn_path, 'rb'))
-        assert (len(feats) == len(orc_bnd) == len(phn_label))
+        train_bound = pickle.load(open(train_bnd_path, 'rb'))
+        assert (len(feats) == len(orc_bnd) == len(phn_label) == len(train_bound))
         
         self.data_length = len(feats) if not data_length else data_length
-        self.process_feat(feats[:self.data_length])
         self.process_label(orc_bnd[:self.data_length], phn_label[:self.data_length])
-
-        if train_bnd_path:
-            self.process_train_bnd(train_bnd_path)
+        self.process_train_bnd(feats[:self.data_length], train_bound[:self.data_length])
 
         if target_path:
             self.process_target(target_path)
@@ -91,40 +90,51 @@ class PickleDataset(Dataset):
         self.phn_mapping    = dict([(i, phn_mapping[phn]) for i, phn in enumerate(all_phn)])
         self.sil_idx = self.phn2idx['sil']
 
-    def process_feat(self, feats):
-        assert len(feats) == self.data_length
-        half_window = (self.concat_window-1) // 2
-        self.feat_dim = feats[0].shape[-1]
-        self.feats = []
-        for feat in feats:
-            _feat_ = np.concatenate([np.tile(feat[0], (half_window, 1)), feat,
-                                     np.tile(feat[-1], (half_window, 1))], axis=0)
-            feature = torch.tensor([np.reshape(_feat_[l : l+self.concat_window], [-1])
-                                    for l in range(len(feat))])[:self.feat_max_length]
-            self.feats.append(feature)
-
     def process_label(self, orc_bnd, phn_label):
         assert len(orc_bnd) == len(phn_label) == self.data_length
         self.frame_labels = []
         for bnd, phn in zip(orc_bnd, phn_label):
             assert len(bnd) == len(phn) + 1
             frame_label = []
+            if bnd[0] != 0:
+                bnd[0] = 0
             for prev_b, b, p in zip(bnd, bnd[1:], phn):
                 frame_label += [self.phn2idx[p]] * (b-prev_b)
             frame_label += [self.phn2idx[phn[-1]]]
             self.frame_labels.append(torch.tensor(frame_label))
 
-    def process_train_bnd(self, train_bnd_path):
-        train_bound = pickle.load(open(train_bnd_path, 'rb'))[:self.data_length]
-        assert (len(train_bound) == self.data_length)
-        self.train_bnd = []
-        self.train_bnd_range = []
-        self.train_seq_length = []
-        for bound in train_bound:
-            bound = torch.tensor(bound)
-            self.train_bnd.append(bound[:-1][:self.phn_max_length])
-            self.train_bnd_range.append((bound[1:] - bound[:-1])[:self.phn_max_length])
-            self.train_seq_length.append(min(len(bound)-1, self.phn_max_length))
+    def process_train_bnd(self, feats, train_bnd):
+        assert len(feats) == self.data_length == len(train_bnd) == len(self.frame_labels)
+        half_window = (self.concat_window-1) // 2
+        self.feat_dim = feats[0].shape[-1]
+        self.feats = []
+        self.feats_segment_len = []
+        self.feats_labels = []
+        i = 0
+        for feat, bnd, frame_label in zip(feats, train_bnd, self.frame_labels):
+            segment_feature = []
+            segment_len = []
+            segment_label = []
+
+            _feat_ = np.concatenate([np.tile(feat[0], (half_window, 1)), feat,
+                                     np.tile(feat[-1], (half_window, 1))], axis=0)
+            feature = torch.tensor([np.reshape(_feat_[l : l+self.concat_window], [-1])
+                                    for l in range(len(feat))])[:self.feat_max_length]
+
+            for prev_b, b in zip(bnd[:-1], bnd[1:]):
+                if prev_b == b:
+                    segment_feature.append(feature[prev_b:prev_b+1])
+                    segment_len.append(1)
+                    segment_label.append(frame_label[prev_b])
+                else:
+                    segment_feature.append(feature[min(prev_b, b):max(prev_b, b)])
+                    segment_len.append(abs(prev_b - b))
+                    # print(i, len(frame_label), prev_b, b)
+                    segment_label.append(Counter(list(frame_label[min(prev_b, b):max(prev_b, b)])).most_common(1)[0][0])
+            self.feats.append(segment_feature) 
+            self.feats_segment_len.append(torch.tensor(segment_len))
+            self.feats_labels.append(torch.tensor(segment_label))
+            i += 1
 
     def process_target(self, target_path):
         target_data = [line.strip().split() for line in open(target_path, 'r')]
@@ -134,11 +144,9 @@ class PickleDataset(Dataset):
     def create_datasets(self, mode):
         if mode == 'train':
             self.source = SourceDataset(self.feats,
-                                        self.train_bnd,
-                                        self.train_bnd_range,
-                                        self.train_seq_length)
+                                        self.feats_segment_len)
             self.target = TargetDataset(self.target_data, self.sil_idx, augment_prob=self.target_augment_prob)
-        self.dev = DevDataset(self.feats, self.frame_labels)
+        self.dev = DevDataset(self.feats, self.feats_segment_len, self.frame_labels, self.feats_labels)
 
     def print_parameter(self, target=False):
         print ('Data Loader Parameter:')
@@ -184,34 +192,37 @@ class TargetDataset(Dataset):
         return torch.tensor(new_seq)
 
 class SourceDataset(Dataset):
-    def __init__(self, feats, train_bnd, train_bnd_range, train_seq_length):
+    def __init__(self, feats, feats_segment_len):
         self.feats = feats
-        self.train_bnd = train_bnd
-        self.train_bnd_range = train_bnd_range
-        self.train_seq_length = train_seq_length
-        assert len(feats) == len(train_bnd) == len(train_bnd_range) == len(train_seq_length)
+        self.feats_segment_len = feats_segment_len
+        assert len(feats) == len(self.feats_segment_len)
 
     def __len__(self):
         return len(self.feats)
 
     def __getitem__(self, index):
         feat = self.feats[index]
-        train_bnd = self.train_bnd[index]
-        train_bnd_range = self.train_bnd_range[index]
-        train_seq_length = self.train_seq_length[index]
-        return feat, train_bnd, train_bnd_range, train_seq_length
+        feat_segment_len = self.feats_segment_len[index]
+        train_seq_length = len(feat)
+        return feat, feat_segment_len, train_seq_length
 
 
 class DevDataset(Dataset):
-    def __init__(self, feats, frame_labels):
+    def __init__(self, feats, feats_segment_len, frame_labels, feats_labels):
         self.feats = feats
+        self.feats_segment_len = feats_segment_len
         self.frame_labels = frame_labels
-        assert len(feats) == len(frame_labels)
+        self.feats_labels = feats_labels
+        assert len(feats) == len(self.feats_segment_len) == len(frame_labels) == len(feats_labels)
 
     def __len__(self):
         return len(self.feats)
 
     def __getitem__(self, index):
         feat = self.feats[index]
+        feat_segment_len = self.feats_segment_len[index]
+        train_seq_length = len(feat)
         frame_label = self.frame_labels[index]
-        return feat, frame_label
+        feats_label = self.feats_labels[index]
+        origin_length = len(frame_label)
+        return feat, feat_segment_len, train_seq_length, feats_label, origin_length, frame_label

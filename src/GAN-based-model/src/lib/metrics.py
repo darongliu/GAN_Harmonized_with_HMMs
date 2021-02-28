@@ -28,10 +28,12 @@ def calc_fer(prediction : List[torch.Tensor],
         frame_num += l
     return frame_error, frame_num
 
-def per_eval(pred, frame_label, length):
+def per_eval(pred, frame_label, pred_length, frame_label_length=None):
     """ Calculate PER with count of errors and total counts """
-    pred = [p[:l] for p, l in zip(pred, length)]
-    label = [f[:l] for f, l in zip(frame_label, length)]
+    if frame_label_length is None:
+        frame_label_length = pred_length
+    pred = [p[:l] for p, l in zip(pred, pred_length)]
+    label = [f[:l] for f, l in zip(frame_label, frame_label_length)]
     phone_error, phone_num = calc_per(pred, label)
     return phone_error, phone_num, phone_error / phone_num
 
