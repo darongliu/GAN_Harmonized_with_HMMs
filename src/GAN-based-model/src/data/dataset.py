@@ -122,6 +122,8 @@ class PickleDataset(Dataset):
                                     for l in range(len(feat))])[:self.feat_max_length]
 
             for prev_b, b in zip(bnd[:-1], bnd[1:]):
+                if min(prev_b, b) >= len(frame_label):
+                    break
                 if prev_b == b:
                     segment_feature.append(feature[prev_b:prev_b+1])
                     segment_len.append(1)
