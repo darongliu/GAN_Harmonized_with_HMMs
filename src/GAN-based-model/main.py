@@ -198,8 +198,8 @@ if __name__ == "__main__":
 
     elif args.mode == 'eval':
         g.load_ckpt(config.load_path)
-        g.test(train_data_set, f'{args.save_dir}/train.pkl')
-        g.test(test_data_set, f'{args.save_dir}/test.pkl', fer_result_path) # fer is report on dev set
+        g.test(train_data_set, f'{args.save_dir}/train.pkl', f'{args.save_dir}/train-length.pkl')
+        g.test(test_data_set, f'{args.save_dir}/test.pkl', f'{args.save_dir}/test-length.pkl', fer_result_path) # fer is report on dev set
 
     elif args.mode == 'test_reduce':
         g.test_reduce(train_data_set, \

@@ -215,18 +215,20 @@ class UnsModel(nn.Module):
         step_fer = fers / fnums * 100
         return step_fer
 
-    def test(self, dev_data_set, file_path, fer_result_path=''):
+    def test(self, dev_data_set, file_path, length_path, fer_result_path=''):
         dev_source = get_dev_data_loader(dev_data_set, batch_size=self.config.batch_size) 
         self.gen_model.eval()
         fers, fnums = 0, 0
         fers_39, fnums_39 = 0, 0
         pers_39, pnums_39 = 0, 0
         probs = []
+        all_length = []
         # calc all phn 39 and give index
         all_p39 = list(set(dev_data_set.phn_mapping.values()))
         phn392idx = dict(zip(all_p39, range(len(all_p39))))
 
         for feats, feats_segment_len, recover_idx_0, recover_idx_1, seq_lengths, feats_labels, origin_lengths, frame_labels in dev_source:
+            all_length += list(seq_lengths)
             prob_frame = self.gen_model(feats.to(device), feats_segment_len.to(device))
             prob_reorg = self.gen_model.reorg(prob_frame, recover_idx_0.to(device), recover_idx_1.to(device))
             prob, soft_prob, hard_prob = self.gen_model.gumbel(prob_reorg, mask_len=seq_lengths)
@@ -282,8 +284,12 @@ class UnsModel(nn.Module):
                 f.write('frame error rate: '+str(step_fer)+'\n')
                 f.write('frame error rate on phn 39: '+str(step_fer_39)+'\n')
                 f.write('phone error rate on phn 39: '+str(step_per_39)+'\n')
-        print(np.array(probs).shape)
-        pk.dump(np.array(probs), open(file_path, 'wb'))
+        pad_probs = np.zeros((len(probs), max([len(a) for a in probs]), probs[0].shape[-1]))
+        for i, a in enumerate(probs):
+            pad_probs[i, :len(a), :] = a
+        print(pad_probs.shape)
+        pk.dump(pad_probs, open(file_path, 'wb'))
+        pk.dump(np.array(all_length), open(length_path, 'wb'))
 
     def test_reduce(self, dev_data_set, origin_posterior_path, file_path, length_path, extend_file_path, fer_result_path=''):
         # do not output or write anything
